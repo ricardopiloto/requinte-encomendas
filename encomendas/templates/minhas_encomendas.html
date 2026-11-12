@@ -80,6 +80,31 @@
       font-size: 13px;
       font-weight: 600;
     }
+    .filtros {
+      border: 1px dashed var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      align-items: center;
+    }
+    .filtros a {
+      color: var(--muted);
+      text-decoration: none;
+      min-height: 44px;
+      min-width: 44px;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 600;
+    }
+    .filtros a[aria-current="page"] {
+      color: var(--fg);
+      text-decoration: underline;
+      font-weight: 700;
+    }
     .order-card {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -97,9 +122,20 @@
     }
     .order-name { font-size: 13px; font-weight: 700; }
     .order-meta { font-size: 11px; color: var(--muted); }
-    .pill {
+    .order-margin {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border-top: 1px dashed var(--line-soft);
+      padding-top: 6px;
+      margin-top: 2px;
+    }
+    .status {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
       border-radius: 20px;
       padding: 4px 10px;
       font-size: 11px;
@@ -107,9 +143,17 @@
       border: 1px solid currentColor;
       white-space: nowrap;
     }
-    .pill.pendente { color: var(--pend); }
-    .pill.em_producao { color: var(--warn); }
-    .pill.entregue { color: var(--ok); }
+    .status-icone {
+      font-style: normal;
+      line-height: 1;
+    }
+    .status-pendente { color: var(--pend); }
+    .status-em-producao { color: var(--warn); }
+    .status-entregue { color: var(--ok); }
+    .status-desconhecido { color: var(--muted); }
+    .margem-ausente {
+      font-style: italic;
+    }
     .empty {
       border: 1px dashed var(--line-soft);
       border-radius: 8px;
@@ -117,13 +161,79 @@
       font-size: 12px;
       color: var(--muted);
     }
+    .paginacao {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: auto;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .paginacao a,
+    .paginacao span.disabled {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: var(--fg);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .paginacao span.disabled {
+      opacity: 0.45;
+      color: var(--muted);
+    }
+    .bottomnav {
+      display: flex;
+      border-top: 1px solid var(--line-soft);
+    }
+    .bottomnav a,
+    .bottomnav button {
+      flex: 1;
+      text-align: center;
+      padding: 10px 4px;
+      font-size: 10px;
+      color: var(--muted);
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: transparent;
+      border: 0;
+      text-decoration: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .bottomnav .active {
+      color: var(--fg);
+      font-weight: 700;
+    }
+    .bottomnav .dot {
+      width: 18px;
+      height: 18px;
+      border: 1px dashed var(--line-soft);
+      border-radius: 5px;
+    }
+    .bottomnav form {
+      flex: 1;
+      display: flex;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <span class="title">Encomendas</span>
-      <a href="{% url 'home' %}">Início</a>
+      <a href="{% url 'nova_encomenda' %}">Nova</a>
     </header>
 
     <main class="content">
@@ -135,22 +245,79 @@
         </ul>
       {% endif %}
 
-      {% for encomenda in encomendas %}
+      <nav class="filtros" aria-label="Filtrar por status">
+        <span>Filtro:</span>
+        {% for valor, rotulo in status_filtros %}
+          <a
+            href="?status={{ valor }}"
+            {% if status_filtro == valor %}aria-current="page"{% endif %}
+          >{{ rotulo }}</a>
+        {% endfor %}
+      </nav>
+
+      {% for item in itens %}
         <article class="order-card">
           <div class="order-top">
-            <span class="order-name">{{ encomenda.cliente.nome }} — {{ encomenda.produto }}</span>
-            <span class="pill {{ encomenda.status }}">{{ encomenda.get_status_display }}</span>
+            <span class="order-name">
+              {{ item.encomenda.cliente.nome }} — {{ item.encomenda.produto }}
+            </span>
+            <span class="status {{ item.status_classe }}">
+              <span class="status-icone" aria-hidden="true">{{ item.status_icone }}</span>
+              <span class="status-texto">{{ item.status_rotulo }}</span>
+            </span>
           </div>
           <span class="order-meta">
-            Entrega: {{ encomenda.data_entrega|date:"d/m/Y" }}
-            · {{ encomenda.sabor }}
-            · R$ {{ encomenda.valor_cobrado }}
+            Entrega: {{ item.encomenda.data_entrega|date:"d/m/Y" }}
           </span>
+          <div class="order-margin">
+            <span>Cobrado R$ {{ item.encomenda.valor_cobrado }}</span>
+            {% if item.margem_valor is None %}
+              <span class="margem-ausente">{{ item.margem_texto }}</span>
+            {% else %}
+              <span>Margem {{ item.margem_texto }}</span>
+            {% endif %}
+          </div>
         </article>
       {% empty %}
-        <div class="empty">Nenhuma encomenda cadastrada ainda.</div>
+        <div class="empty">Nenhuma encomenda encontrada para este filtro.</div>
       {% endfor %}
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="paginacao" aria-label="Paginação">
+          {% if page_obj.has_previous %}
+            <a href="?status={{ status_filtro }}&page={{ page_obj.previous_page_number }}">Anterior</a>
+          {% else %}
+            <span class="disabled">Anterior</span>
+          {% endif %}
+
+          <span>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+
+          {% if page_obj.has_next %}
+            <a href="?status={{ status_filtro }}&page={{ page_obj.next_page_number }}">Próxima</a>
+          {% else %}
+            <span class="disabled">Próxima</span>
+          {% endif %}
+        </nav>
+      {% endif %}
     </main>
+
+    <nav class="bottomnav" aria-label="Navegação principal">
+      <a href="{% url 'home' %}">
+        <span class="dot" aria-hidden="true"></span>
+        Início
+      </a>
+      <a class="active" href="{% url 'minhas_encomendas' %}">
+        <span class="dot" aria-hidden="true"></span>
+        Encomendas
+      </a>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit">
+          <span class="dot" aria-hidden="true"></span>
+          Sair
+        </button>
+      </form>
+    </nav>
   </div>
 </body>
 </html>
