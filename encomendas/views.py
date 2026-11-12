@@ -1,6 +1,10 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+
+from .forms import EncomendaForm
+from .models import Encomenda
 
 
 def _menu_context(user):
@@ -19,12 +23,32 @@ def home(request):
 
 @login_required
 def nova_encomenda(request):
-    return HttpResponse('Nova encomenda — em breve')
+    if request.method == 'POST':
+        form = EncomendaForm(request.POST)
+        if form.is_valid():
+            encomenda = form.save()
+            messages.success(
+                request,
+                f'Encomenda de {encomenda.cliente.nome} salva com sucesso.',
+            )
+            return redirect('minhas_encomendas')
+    else:
+        form = EncomendaForm()
+
+    return render(request, 'nova_encomenda.html', {'form': form})
 
 
 @login_required
 def minhas_encomendas(request):
-    return HttpResponse('Minhas encomendas — em breve')
+    encomendas = (
+        Encomenda.objects.select_related('cliente')
+        .order_by('data_entrega', 'id')
+    )
+    return render(
+        request,
+        'minhas_encomendas.html',
+        {'encomendas': encomendas},
+    )
 
 
 @login_required
