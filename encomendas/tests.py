@@ -1,13 +1,17 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, OuterRef, Subquery
-from django.test import TestCase
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 
 from .forms import EncomendaForm
 from .models import Cliente, CustoProduto, Encomenda
 from .views import _montar_itens_encomenda
+
+User = get_user_model()
 
 
 def _queryset_com_custo():
@@ -172,3 +176,67 @@ class EncomendaStatusModelTests(TestCase):
             encomenda.full_clean()
 
         self.assertIn('status', contexto.exception.message_dict)
+
+
+@override_settings(ALLOWED_HOSTS=['testserver', 'localhost', '127.0.0.1'])
+class FluxoEncomendaIntegracaoTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.password = 'senha-segura-123'
+        self.user = User.objects.create_user(
+            username='deise',
+            password=self.password,
+            first_name='Deise',
+        )
+        CustoProduto.objects.create(
+            produto='Bolo',
+            sabor='Chocolate',
+            custo_producao=Decimal('85.00'),
+        )
+
+    def test_login_cadastro_e_listagem_com_status_e_margem(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+        self.assertEqual(login_response.url, reverse('home'))
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Maria',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-14',
+                'valor_cobrado': '180.00',
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+        self.assertEqual(cadastro_response.url, reverse('minhas_encomendas'))
+
+        encomenda = Encomenda.objects.get()
+        self.assertEqual(encomenda.cliente.nome, 'Maria')
+        self.assertEqual(encomenda.produto, 'Bolo')
+        self.assertEqual(encomenda.sabor, 'Chocolate')
+        self.assertEqual(encomenda.status, Encomenda.Status.PENDENTE)
+        self.assertEqual(encomenda.valor_cobrado, Decimal('180.00'))
+
+        listagem_response = self.client.get(reverse('minhas_encomendas'))
+        self.assertEqual(listagem_response.status_code, 200)
+        conteudo = listagem_response.content.decode()
+
+        self.assertIn('Maria — Bolo', conteudo)
+        self.assertIn('status-pendente', conteudo)
+        self.assertIn('Pendente', conteudo)
+        self.assertIn('⏳', conteudo)
+        self.assertIn('Entrega: 14/11/2026', conteudo)
+        self.assertIn('Cobrado R$ 180.00', conteudo)
+        self.assertIn('Margem R$ 95.00', conteudo)
+        self.assertContains(
+            listagem_response,
+            'Encomenda de Maria salva com sucesso.',
+        )
