@@ -5,6 +5,9 @@ from . import views
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('encomendas/nova/', views.nova_encomenda, name='nova_encomenda'),
+    path('encomendas/', views.minhas_encomendas, name='minhas_encomendas'),
+    path('custos/', views.custos_produtos, name='custos_produtos'),
     path(
         'login/',
         auth_views.LoginView.as_view(template_name='login.html'),
