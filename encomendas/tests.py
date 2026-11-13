@@ -515,3 +515,76 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             listagem_apos_post,
             'Encomenda de Beatriz foi excluída.',
         )
+
+    def test_formulario_exibe_opcoes_de_custo_produto(self):
+        CustoProduto.objects.create(
+            produto='Docinho',
+            sabor='Brigadeiro',
+            custo_producao=Decimal('40.00'),
+        )
+
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'Bolo (Chocolate)')
+        self.assertContains(formulario, 'Docinho (Brigadeiro)')
+        self.assertContains(formulario, 'Outro (informar manualmente)')
+        self.assertContains(
+            formulario,
+            f'value="{self._item_bolo_chocolate()}"',
+        )
+        self.assertContains(formulario, f'value="{ITEM_OUTRO}"')
+
+    def test_opcao_outro_cadastra_encomenda_sem_custo_existente(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        self.assertFalse(
+            CustoProduto.objects.filter(
+                produto='Torta',
+                sabor='Limão',
+            ).exists()
+        )
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Helena',
+                'item': ITEM_OUTRO,
+                'produto_outro': 'Torta',
+                'sabor_outro': 'Limão',
+                'data_entrega': '20/11/2026',
+                'valor_cobrado': '95.00',
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+        self.assertEqual(cadastro_response.url, reverse('minhas_encomendas'))
+
+        encomenda = Encomenda.objects.get()
+        self.assertEqual(encomenda.cliente.nome, 'Helena')
+        self.assertEqual(encomenda.produto, 'Torta')
+        self.assertEqual(encomenda.sabor, 'Limão')
+        self.assertFalse(
+            CustoProduto.objects.filter(
+                produto='Torta',
+                sabor='Limão',
+            ).exists()
+        )
+
+        listagem = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem, 'Helena — Torta')
+        self.assertContains(listagem, 'custo não cadastrado')
