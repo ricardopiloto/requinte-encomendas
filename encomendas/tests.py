@@ -8,7 +8,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils.formats import number_format
 
-from .forms import EncomendaForm
+from .forms import ITEM_OUTRO, EncomendaForm
 from .models import Cliente, CustoProduto, Encomenda
 from .views import _montar_itens_encomenda
 
@@ -111,8 +111,9 @@ class EncomendaFormValidationTests(TestCase):
     def _dados_validos(self):
         return {
             'cliente': 'Maria',
-            'produto': 'Bolo',
-            'sabor': 'Chocolate',
+            'item': ITEM_OUTRO,
+            'produto_outro': 'Bolo',
+            'sabor_outro': 'Chocolate',
             'data_entrega': '14/11/2026',
             'valor_cobrado': '180.00',
         }
@@ -120,17 +121,46 @@ class EncomendaFormValidationTests(TestCase):
     def test_formulario_valido_com_todos_os_campos(self):
         form = EncomendaForm(data=self._dados_validos())
         self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['produto'], 'Bolo')
+        self.assertEqual(form.cleaned_data['sabor'], 'Chocolate')
+
+    def test_formulario_valido_com_item_cadastrado(self):
+        custo = CustoProduto.objects.create(
+            produto='Bolo',
+            sabor='Chocolate',
+            custo_producao=Decimal('85.00'),
+        )
+        form = EncomendaForm(
+            data={
+                'cliente': 'Maria',
+                'item': str(custo.pk),
+                'data_entrega': '14/11/2026',
+                'valor_cobrado': '180.00',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['produto'], 'Bolo')
+        self.assertEqual(form.cleaned_data['sabor'], 'Chocolate')
 
     def test_rejeita_quando_campo_obrigatorio_esta_vazio(self):
         campos = [
             'cliente',
-            'produto',
-            'sabor',
+            'item',
             'data_entrega',
             'valor_cobrado',
         ]
 
         for campo in campos:
+            with self.subTest(campo=campo):
+                dados = self._dados_validos()
+                dados[campo] = ''
+                form = EncomendaForm(data=dados)
+
+                self.assertFalse(form.is_valid())
+                self.assertIn(campo, form.errors)
+
+    def test_rejeita_outro_sem_produto_ou_sabor(self):
+        for campo in ('produto_outro', 'sabor_outro'):
             with self.subTest(campo=campo):
                 dados = self._dados_validos()
                 dados[campo] = ''
@@ -193,10 +223,15 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             password=self.password,
             first_name='Deise',
         )
-        CustoProduto.objects.create(
+        self.custo_bolo = CustoProduto.objects.create(
             produto='Bolo',
             sabor='Chocolate',
             custo_producao=Decimal('85.00'),
+        )
+
+    def _item_bolo_chocolate(self):
+        return str(
+            CustoProduto.objects.get(produto='Bolo', sabor='Chocolate').pk
         )
 
     def test_login_cadastro_e_listagem_com_status_e_margem(self):
@@ -214,8 +249,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Maria',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '14/11/2026',
                 'valor_cobrado': '180.00',
             },
@@ -279,8 +313,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Maria',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '14/11/2026',
                 'valor_cobrado': str(valor_cobrado),
             },
@@ -309,8 +342,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Carla',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '15/11/2026',
                 'valor_cobrado': '150.00',
             },
@@ -392,8 +424,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Juliana',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_inicial),
             },
@@ -407,8 +438,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('editar_encomenda', args=[encomenda.pk]),
             {
                 'cliente': 'Juliana',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_atualizado),
             },
@@ -450,8 +480,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Beatriz',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
+                'item': self._item_bolo_chocolate(),
                 'data_entrega': '18/11/2026',
                 'valor_cobrado': '160.00',
             },

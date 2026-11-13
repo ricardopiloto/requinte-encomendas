@@ -96,9 +96,26 @@
       width: 100%;
       font-family: inherit;
     }
+    select.input {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 32px;
+    }
     .input[aria-invalid="true"] {
       border-color: var(--error);
       background: #fff8f8;
+    }
+    .outro-fields {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .outro-fields.is-visible {
+      display: flex;
     }
     .errorlist {
       margin: 0;
@@ -116,6 +133,11 @@
       background: var(--error-bg);
       color: var(--error);
       font-size: 0.875rem;
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin: 0;
     }
     .actions {
       margin-top: auto;
@@ -171,16 +193,28 @@
           {{ form.cliente.errors }}
         </div>
 
-        <div class="row2">
-          <div class="field">
-            <label class="label" for="{{ form.produto.id_for_label }}">Produto *</label>
-            {{ form.produto }}
-            {{ form.produto.errors }}
-          </div>
-          <div class="field">
-            <label class="label" for="{{ form.sabor.id_for_label }}">Sabor *</label>
-            {{ form.sabor }}
-            {{ form.sabor.errors }}
+        <div class="field">
+          <label class="label" for="{{ form.item.id_for_label }}">Produto e sabor *</label>
+          {{ form.item }}
+          {{ form.item.errors }}
+          <p class="hint">Lista baseada nos custos cadastrados. Use “Outro” para um item novo.</p>
+        </div>
+
+        <div
+          id="outro-fields"
+          class="outro-fields{% if form.item.value == '__outro__' or form.produto_outro.errors or form.sabor_outro.errors %} is-visible{% endif %}"
+        >
+          <div class="row2">
+            <div class="field">
+              <label class="label" for="{{ form.produto_outro.id_for_label }}">Produto *</label>
+              {{ form.produto_outro }}
+              {{ form.produto_outro.errors }}
+            </div>
+            <div class="field">
+              <label class="label" for="{{ form.sabor_outro.id_for_label }}">Sabor *</label>
+              {{ form.sabor_outro }}
+              {{ form.sabor_outro.errors }}
+            </div>
           </div>
         </div>
 
@@ -204,5 +238,23 @@
       </form>
     </main>
   </div>
+  <script>
+    (function () {
+      var select = document.getElementById('id_item');
+      var outro = document.getElementById('outro-fields');
+      if (!select || !outro) return;
+
+      function syncOutroFields() {
+        if (select.value === '__outro__') {
+          outro.classList.add('is-visible');
+        } else {
+          outro.classList.remove('is-visible');
+        }
+      }
+
+      select.addEventListener('change', syncOutroFields);
+      syncOutroFields();
+    })();
+  </script>
 </body>
 </html>
