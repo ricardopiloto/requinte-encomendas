@@ -139,6 +139,42 @@
       color: var(--muted);
       margin: 0;
     }
+    .preco-preview {
+      border: 1px dashed var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #fbfbfa;
+    }
+    .preco-preview .linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .preco-preview .rotulo {
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 10px;
+    }
+    .preco-preview .valor {
+      font-weight: 700;
+      text-align: right;
+    }
+    .preco-preview .valor.ausente {
+      font-style: italic;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .preco-preview .nota {
+      margin: 0;
+      font-size: 11px;
+      color: var(--muted);
+    }
     .actions {
       margin-top: auto;
       display: flex;
@@ -231,6 +267,18 @@
           </div>
         </div>
 
+        <div class="preco-preview" aria-live="polite">
+          <div class="linha">
+            <span class="rotulo">Custo de produção</span>
+            <span class="valor" id="preview-custo">—</span>
+          </div>
+          <div class="linha">
+            <span class="rotulo">Margem estimada</span>
+            <span class="valor" id="preview-margem">—</span>
+          </div>
+          <p class="nota">Apoio à precificação. Não impede salvar a encomenda.</p>
+        </div>
+
         <div class="actions">
           <a class="btn-secondary" href="{{ cancel_url }}">Cancelar</a>
           <button class="btn-primary" type="submit">{{ botao_salvar }}</button>
@@ -238,23 +286,118 @@
       </form>
     </main>
   </div>
+  {{ form.custos_json|json_script:"custos-data" }}
   <script>
     (function () {
       var select = document.getElementById('id_item');
       var outro = document.getElementById('outro-fields');
-      if (!select || !outro) return;
+      var valorInput = document.getElementById('id_valor_cobrado');
+      var produtoOutro = document.getElementById('id_produto_outro');
+      var saborOutro = document.getElementById('id_sabor_outro');
+      var previewCusto = document.getElementById('preview-custo');
+      var previewMargem = document.getElementById('preview-margem');
+      var dataEl = document.getElementById('custos-data');
+      if (!select || !outro || !previewCusto || !previewMargem || !dataEl) return;
+
+      var data = JSON.parse(dataEl.textContent);
+      var CUSTO_AUSENTE = 'custo não cadastrado';
+
+      function formatMoney(valor) {
+        return 'R$ ' + Number(valor).toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+
+      function parseValorCobrado(raw) {
+        if (!raw) return null;
+        var normalized = String(raw).trim().replace(/\s/g, '');
+        if (!normalized) return null;
+        if (normalized.indexOf(',') >= 0) {
+          normalized = normalized.replace(/\./g, '').replace(',', '.');
+        }
+        var numero = Number(normalized);
+        return Number.isFinite(numero) ? numero : null;
+      }
 
       function syncOutroFields() {
-        if (select.value === '__outro__') {
+        if (select.value === data.outro) {
           outro.classList.add('is-visible');
         } else {
           outro.classList.remove('is-visible');
         }
       }
 
-      select.addEventListener('change', syncOutroFields);
+      function custoAtual() {
+        var item = select.value;
+        if (!item) return null;
+        if (item !== data.outro) {
+          return Object.prototype.hasOwnProperty.call(data.por_item, item)
+            ? Number(data.por_item[item])
+            : null;
+        }
+        var produto = (produtoOutro && produtoOutro.value || '').trim().toLowerCase();
+        var sabor = (saborOutro && saborOutro.value || '').trim().toLowerCase();
+        if (!produto || !sabor) return null;
+        var chave = produto + '|' + sabor;
+        return Object.prototype.hasOwnProperty.call(data.por_par, chave)
+          ? Number(data.por_par[chave])
+          : null;
+      }
+
+      function atualizarPreview() {
+        var item = select.value;
+        var custo = custoAtual();
+        var cobrado = valorInput ? parseValorCobrado(valorInput.value) : null;
+
+        if (!item) {
+          previewCusto.textContent = '—';
+          previewCusto.classList.add('ausente');
+          previewMargem.textContent = '—';
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        if (custo === null) {
+          previewCusto.textContent = CUSTO_AUSENTE;
+          previewCusto.classList.add('ausente');
+          previewMargem.textContent = CUSTO_AUSENTE;
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        previewCusto.textContent = formatMoney(custo);
+        previewCusto.classList.remove('ausente');
+
+        if (cobrado === null) {
+          previewMargem.textContent = 'informe o valor cobrado';
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        previewMargem.textContent = formatMoney(cobrado - custo);
+        previewMargem.classList.remove('ausente');
+      }
+
+      select.addEventListener('change', function () {
+        syncOutroFields();
+        atualizarPreview();
+      });
+      if (valorInput) {
+        valorInput.addEventListener('input', atualizarPreview);
+        valorInput.addEventListener('change', atualizarPreview);
+      }
+      if (produtoOutro) {
+        produtoOutro.addEventListener('input', atualizarPreview);
+      }
+      if (saborOutro) {
+        saborOutro.addEventListener('input', atualizarPreview);
+      }
+
       syncOutroFields();
+      atualizarPreview();
     })();
   </script>
 </body>
 </html>
+

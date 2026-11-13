@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from django import forms
@@ -92,6 +93,17 @@ class EncomendaForm(forms.ModelForm):
             )
         choices.append((ITEM_OUTRO, 'Outro (informar manualmente)'))
         self.fields['item'].choices = choices
+        self.custos_por_item = {
+            str(custo.pk): format(custo.custo_producao, 'f')
+            for custo in custos
+        }
+        self.custos_por_par = {
+            f'{custo.produto.casefold()}|{custo.sabor.casefold()}': format(
+                custo.custo_producao,
+                'f',
+            )
+            for custo in custos
+        }
 
         if self.instance and self.instance.pk and not self.is_bound:
             self.fields['cliente'].initial = self.instance.cliente.nome
@@ -122,6 +134,17 @@ class EncomendaForm(forms.ModelForm):
         self.fields['item'].widget.attrs['id'] = 'id_item'
         self.fields['produto_outro'].widget.attrs['data-outro-field'] = '1'
         self.fields['sabor_outro'].widget.attrs['data-outro-field'] = '1'
+
+    @property
+    def custos_json(self):
+        return json.dumps(
+            {
+                'por_item': self.custos_por_item,
+                'por_par': self.custos_por_par,
+                'outro': ITEM_OUTRO,
+            },
+            ensure_ascii=False,
+        )
 
     def clean_cliente(self):
         nome = self.cleaned_data['cliente'].strip()
