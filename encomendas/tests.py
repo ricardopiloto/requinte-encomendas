@@ -729,3 +729,66 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertContains(resumo, 'Mês atual')
         self.assertContains(resumo, _moeda(margem_semana_esperada))
         self.assertContains(resumo, _moeda(margem_mes_esperada))
+
+    def test_listagem_ordena_pela_data_de_entrega_mais_proxima(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        # Cadastro propositalmente fora de ordem cronológica.
+        cadastros = [
+            ('Vera', '25/11/2026', '180.00'),
+            ('Ana', '12/11/2026', '170.00'),
+            ('Paula', '20/11/2026', '190.00'),
+        ]
+        for cliente, data_entrega, valor_cobrado in cadastros:
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_entrega,
+                    'valor_cobrado': valor_cobrado,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(Encomenda.objects.count(), 3)
+
+        listagem = self.client.get(reverse('minhas_encomendas'))
+        self.assertEqual(listagem.status_code, 200)
+
+        nomes_ordenados = [
+            item['encomenda'].cliente.nome
+            for item in listagem.context['itens']
+        ]
+        datas_ordenadas = [
+            item['encomenda'].data_entrega
+            for item in listagem.context['itens']
+        ]
+
+        self.assertEqual(nomes_ordenados, ['Ana', 'Paula', 'Vera'])
+        self.assertEqual(
+            datas_ordenadas,
+            [
+                date(2026, 11, 12),
+                date(2026, 11, 20),
+                date(2026, 11, 25),
+            ],
+        )
+        self.assertContains(listagem, 'Ana — Bolo')
+        self.assertContains(listagem, 'Paula — Bolo')
+        self.assertContains(listagem, 'Vera — Bolo')
+
+        # Na HTML, a mais próxima deve aparecer antes das demais.
+        conteudo = listagem.content.decode()
+        pos_ana = conteudo.index('Ana — Bolo')
+        pos_paula = conteudo.index('Paula — Bolo')
+        pos_vera = conteudo.index('Vera — Bolo')
+        self.assertLess(pos_ana, pos_paula)
+        self.assertLess(pos_paula, pos_vera)
