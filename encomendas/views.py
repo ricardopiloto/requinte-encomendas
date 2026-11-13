@@ -49,9 +49,20 @@ STATUS_AVANCO = {
 def _menu_context(user):
     display_name = user.get_short_name() or user.get_username()
     initial = (display_name[:1] or '?').upper()
+    hoje = timezone.localdate()
+    amanha = hoje + timedelta(days=1)
+    entregas_proximas = (
+        Encomenda.objects.filter(
+            data_entrega__gte=hoje,
+            data_entrega__lte=amanha,
+        )
+        .exclude(status=Encomenda.Status.ENTREGUE)
+        .count()
+    )
     return {
         'display_name': display_name,
         'user_initial': initial,
+        'entregas_proximas': entregas_proximas,
     }
 
 
