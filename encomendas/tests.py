@@ -1,5 +1,6 @@
 import json
-from datetime import date
+from calendar import monthrange
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -7,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, OuterRef, Subquery
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.formats import number_format
 
 from .forms import ITEM_OUTRO, EncomendaForm
@@ -636,3 +638,94 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertNotIn('torta|limão', custos['por_par'])
         self.assertEqual(custos['outro'], ITEM_OUTRO)
         self.assertNotIn(ITEM_OUTRO, custos['por_item'])
+
+    def test_resumo_financeiro_soma_margens_entregues_por_periodo(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        hoje = timezone.localdate()
+        semana_inicio = hoje - timedelta(days=hoje.weekday())
+        semana_fim = semana_inicio + timedelta(days=6)
+        mes_inicio = hoje.replace(day=1)
+        mes_fim = hoje.replace(day=monthrange(hoje.year, hoje.month)[1])
+
+        data_na_semana = hoje
+        data_mes_fora_semana = next(
+            mes_inicio + timedelta(days=offset)
+            for offset in range((mes_fim - mes_inicio).days + 1)
+            if not (
+                semana_inicio
+                <= mes_inicio + timedelta(days=offset)
+                <= semana_fim
+            )
+        )
+        data_fora_mes = mes_inicio - timedelta(days=1)
+
+        def data_br(valor):
+            return valor.strftime('%d/%m/%Y')
+
+        def cadastrar(cliente, data_entrega, valor_cobrado):
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_br(data_entrega),
+                    'valor_cobrado': valor_cobrado,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+            return Encomenda.objects.get(cliente__nome=cliente)
+
+        def marcar_entregue(encomenda):
+            for _ in range(2):
+                response = self.client.post(
+                    reverse('avancar_status_encomenda', args=[encomenda.pk]),
+                    {'status': 'todas'},
+                )
+                self.assertEqual(response.status_code, 302)
+            encomenda.refresh_from_db()
+            self.assertEqual(encomenda.status, Encomenda.Status.ENTREGUE)
+
+        # custo Bolo Chocolate = 85.00
+        # margens: 100 (semana), 200 (mês fora da semana), 300 (fora do mês),
+        # 400 (pendente na semana — não deve entrar)
+        encomenda_semana = cadastrar('Rita', data_na_semana, '185.00')
+        marcar_entregue(encomenda_semana)
+
+        encomenda_mes = cadastrar('Sofia', data_mes_fora_semana, '285.00')
+        marcar_entregue(encomenda_mes)
+
+        encomenda_fora = cadastrar('Tania', data_fora_mes, '385.00')
+        marcar_entregue(encomenda_fora)
+
+        encomenda_pendente = cadastrar('Ursula', data_na_semana, '485.00')
+        self.assertEqual(
+            encomenda_pendente.status,
+            Encomenda.Status.PENDENTE,
+        )
+
+        margem_semana_esperada = Decimal('100.00')
+        margem_mes_esperada = Decimal('300.00')
+
+        resumo = self.client.get(reverse('resumo_financeiro'))
+        self.assertEqual(resumo.status_code, 200)
+        self.assertEqual(resumo.context['semana_inicio'], semana_inicio)
+        self.assertEqual(resumo.context['semana_fim'], semana_fim)
+        self.assertEqual(resumo.context['mes_inicio'], mes_inicio)
+        self.assertEqual(resumo.context['mes_fim'], mes_fim)
+        self.assertEqual(
+            resumo.context['margem_semana'],
+            margem_semana_esperada,
+        )
+        self.assertEqual(resumo.context['margem_mes'], margem_mes_esperada)
+        self.assertContains(resumo, 'Semana atual')
+        self.assertContains(resumo, 'Mês atual')
+        self.assertContains(resumo, _moeda(margem_semana_esperada))
+        self.assertContains(resumo, _moeda(margem_mes_esperada))
