@@ -366,3 +366,63 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertEqual(tentativa_retrocesso.status_code, 302)
         encomenda.refresh_from_db()
         self.assertEqual(encomenda.status, Encomenda.Status.ENTREGUE)
+
+    def test_edicao_de_encomenda_atualiza_valor_e_margem_na_listagem(self):
+        custo_producao = Decimal('85.00')
+        valor_inicial = Decimal('180.00')
+        valor_atualizado = Decimal('220.00')
+        margem_atualizada = valor_atualizado - custo_producao
+
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Juliana',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-16',
+                'valor_cobrado': str(valor_inicial),
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+
+        encomenda = Encomenda.objects.get()
+        self.assertEqual(encomenda.valor_cobrado, valor_inicial)
+
+        edicao_response = self.client.post(
+            reverse('editar_encomenda', args=[encomenda.pk]),
+            {
+                'cliente': 'Juliana',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-16',
+                'valor_cobrado': str(valor_atualizado),
+            },
+        )
+        self.assertEqual(edicao_response.status_code, 302)
+        self.assertEqual(edicao_response.url, reverse('minhas_encomendas'))
+
+        encomenda.refresh_from_db()
+        self.assertEqual(encomenda.valor_cobrado, valor_atualizado)
+
+        listagem_response = self.client.get(reverse('minhas_encomendas'))
+        self.assertEqual(listagem_response.status_code, 200)
+        self.assertContains(listagem_response, 'Cobrado R$ 220.00')
+        self.assertContains(
+            listagem_response,
+            f'Margem R$ {margem_atualizada:.2f}',
+        )
+        self.assertContains(
+            listagem_response,
+            'Dados da encomenda de Juliana atualizados.',
+        )
+        self.assertNotContains(listagem_response, 'Cobrado R$ 180.00')
+        self.assertNotContains(listagem_response, 'Margem R$ 95.00')
