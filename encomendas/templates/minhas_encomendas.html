@@ -16,6 +16,8 @@
       --ok-bg: #e8f5ee;
       --warn: #b5740a;
       --pend: #6b6a64;
+      --danger: #9b1c1c;
+      --danger-bg: #fde8e8;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -165,7 +167,8 @@
       width: 100%;
     }
     .btn-editar,
-    .btn-avancar {
+    .btn-avancar,
+    .btn-excluir {
       width: 100%;
       min-width: 44px;
       min-height: 44px;
@@ -187,6 +190,12 @@
     }
     .btn-avancar {
       border-color: currentColor;
+    }
+    .btn-excluir {
+      border: 1px dashed var(--danger);
+      background: var(--danger-bg);
+      color: var(--danger);
+      margin-top: 4px;
     }
     .btn-avancar .status-icone {
       font-style: normal;
@@ -345,6 +354,10 @@
                 </button>
               </form>
             {% endif %}
+            <a
+              class="btn-excluir"
+              href="{% url 'excluir_encomenda' item.encomenda.pk %}"
+            >Excluir</a>
           </div>
         </article>
       {% empty %}

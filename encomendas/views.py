@@ -201,6 +201,29 @@ def minhas_encomendas(request):
 
 
 @login_required
+def excluir_encomenda(request, pk):
+    encomenda = get_object_or_404(
+        Encomenda.objects.select_related('cliente'),
+        pk=pk,
+    )
+
+    if request.method == 'POST':
+        nome_cliente = encomenda.cliente.nome
+        encomenda.delete()
+        messages.success(
+            request,
+            f'Encomenda de {nome_cliente} foi excluída.',
+        )
+        return redirect('minhas_encomendas')
+
+    return render(
+        request,
+        'excluir_encomenda.html',
+        {'encomenda': encomenda},
+    )
+
+
+@login_required
 @require_POST
 def avancar_status_encomenda(request, pk):
     encomenda = get_object_or_404(Encomenda, pk=pk)

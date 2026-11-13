@@ -12,6 +12,11 @@ urlpatterns = [
         name='editar_encomenda',
     ),
     path(
+        'encomendas/<int:pk>/excluir/',
+        views.excluir_encomenda,
+        name='excluir_encomenda',
+    ),
+    path(
         'encomendas/<int:pk>/avancar-status/',
         views.avancar_status_encomenda,
         name='avancar_status_encomenda',
