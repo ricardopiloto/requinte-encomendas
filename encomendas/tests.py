@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -588,3 +589,50 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         listagem = self.client.get(reverse('minhas_encomendas'))
         self.assertContains(listagem, 'Helena — Torta')
         self.assertContains(listagem, 'custo não cadastrado')
+
+    def test_cadastro_exibe_custo_de_producao_do_item_selecionavel(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'id="preview-custo"')
+        self.assertContains(formulario, 'id="preview-margem"')
+        self.assertContains(formulario, 'id="custos-data"')
+
+        custos = json.loads(formulario.context['form'].custos_json)
+        item_id = self._item_bolo_chocolate()
+        self.assertIn(item_id, custos['por_item'])
+        self.assertEqual(
+            Decimal(custos['por_item'][item_id]),
+            Decimal('85.00'),
+        )
+        self.assertEqual(
+            Decimal(custos['por_par']['bolo|chocolate']),
+            Decimal('85.00'),
+        )
+
+    def test_cadastro_indica_custo_nao_cadastrado_quando_sem_custo(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'custo não cadastrado')
+
+        custos = json.loads(formulario.context['form'].custos_json)
+        self.assertNotIn('torta|limão', custos['por_par'])
+        self.assertEqual(custos['outro'], ITEM_OUTRO)
+        self.assertNotIn(ITEM_OUTRO, custos['por_item'])
