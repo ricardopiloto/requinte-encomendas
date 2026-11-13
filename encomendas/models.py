@@ -23,7 +23,7 @@ class Encomenda(models.Model):
     )
     produto = models.CharField(max_length=200)
     sabor = models.CharField(max_length=200)
-    data_entrega = models.DateField()
+    data_entrega = models.DateField(db_index=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
