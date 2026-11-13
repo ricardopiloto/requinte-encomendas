@@ -24,6 +24,11 @@ urlpatterns = [
     path('encomendas/', views.minhas_encomendas, name='minhas_encomendas'),
     path('custos/', views.custos_produtos, name='custos_produtos'),
     path(
+        'custos/<int:pk>/excluir/',
+        views.excluir_custo_produto,
+        name='excluir_custo_produto',
+    ),
+    path(
         'login/',
         auth_views.LoginView.as_view(template_name='login.html'),
         name='login',
