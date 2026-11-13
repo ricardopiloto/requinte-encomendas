@@ -14,6 +14,7 @@
       --muted: #6b6a64;
       --danger: #9b1c1c;
       --danger-bg: #fde8e8;
+      --danger-border: #c0392b;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -60,54 +61,80 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
     }
     .aviso {
-      padding: 0.75rem 0.85rem;
-      border-radius: 8px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 2px solid var(--danger-border);
       background: var(--danger-bg);
       color: var(--danger);
-      font-size: 13px;
+      text-align: center;
+    }
+    .aviso-titulo {
+      display: block;
+      font-size: 15px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+    .aviso-texto {
+      margin: 0;
+      font-size: 14px;
       font-weight: 600;
+      line-height: 1.35;
     }
     .resumo {
       border: 1px solid var(--line);
       border-radius: 10px;
-      padding: 12px;
+      padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
+      background: #fbfbfa;
     }
-    .resumo .label {
-      font-size: 10px;
+    .resumo-titulo {
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--muted);
+      font-weight: 700;
     }
-    .resumo .valor {
-      font-size: 14px;
+    .resumo .campo .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .resumo .campo .valor {
+      font-size: 16px;
       font-weight: 700;
     }
     .pergunta {
       margin: 0;
-      font-size: 14px;
+      font-size: 15px;
+      font-weight: 600;
       color: var(--fg);
+      line-height: 1.4;
     }
     .actions {
       margin-top: auto;
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 10px;
     }
     .btn-cancelar,
     .btn-confirmar {
-      flex: 1;
+      width: 100%;
       border-radius: 8px;
       padding: 14px 12px;
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 700;
       text-align: center;
       min-width: 44px;
-      min-height: 44px;
+      min-height: 48px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -116,13 +143,20 @@
       cursor: pointer;
     }
     .btn-cancelar {
-      border: 1px solid var(--line);
-      background: var(--panel);
-      color: var(--fg);
+      border: 2px solid var(--fg);
+      background: var(--fg);
+      color: var(--panel);
     }
     .btn-confirmar {
-      border: 1px solid var(--danger);
+      border: 2px dashed var(--danger-border);
+      background: var(--danger-bg);
+      color: var(--danger);
+      font-size: 14px;
+    }
+    .btn-confirmar:hover,
+    .btn-confirmar:focus-visible {
       background: var(--danger);
+      border-style: solid;
       color: #fff;
     }
   </style>
@@ -134,33 +168,45 @@
     </header>
 
     <main class="content">
-      <div class="aviso">Esta ação não pode ser desfeita.</div>
+      <div class="aviso" role="alert">
+        <span class="aviso-titulo">Atenção: permanente</span>
+        <p class="aviso-texto">
+          Esta exclusão não pode ser desfeita. A encomenda some de vez da listagem.
+        </p>
+      </div>
 
       <div class="resumo">
-        <div>
+        <div class="resumo-titulo">Encomenda que será excluída</div>
+        <div class="campo">
           <div class="label">Cliente</div>
           <div class="valor">{{ encomenda.cliente.nome }}</div>
         </div>
-        <div>
+        <div class="campo">
           <div class="label">Produto</div>
           <div class="valor">{{ encomenda.produto }} ({{ encomenda.sabor }})</div>
         </div>
-        <div>
+        <div class="campo">
           <div class="label">Data de entrega</div>
           <div class="valor">{{ encomenda.data_entrega|date:"d/m/Y" }}</div>
+        </div>
+        <div class="campo">
+          <div class="label">Valor cobrado</div>
+          <div class="valor">R$ {{ encomenda.valor_cobrado|floatformat:2 }}</div>
         </div>
       </div>
 
       <p class="pergunta">
-        Tem certeza de que deseja excluir esta encomenda?
+        Confirma que quer excluir esta encomenda?
       </p>
 
       <div class="actions">
-        <a class="btn-cancelar" href="{% url 'minhas_encomendas' %}">Cancelar</a>
-        <form method="post" style="flex:1;margin:0;display:flex;">
+        <a class="btn-cancelar" href="{% url 'minhas_encomendas' %}">
+          Cancelar e manter a encomenda
+        </a>
+        <form method="post" style="margin:0;">
           {% csrf_token %}
-          <button class="btn-confirmar" type="submit" style="width:100%;">
-            Excluir definitivamente
+          <button class="btn-confirmar" type="submit">
+            Sim, excluir definitivamente
           </button>
         </form>
       </div>
