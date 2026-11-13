@@ -251,6 +251,11 @@ def avancar_status_encomenda(request, pk):
 
 @login_required
 def custos_produtos(request):
+    edit_id = request.GET.get('edit') or request.POST.get('edit')
+    custo_em_edicao = None
+    if edit_id:
+        custo_em_edicao = get_object_or_404(CustoProduto, pk=edit_id)
+
     if request.method == 'POST':
         form = CustoProdutoForm(request.POST)
         if form.is_valid():
@@ -266,17 +271,16 @@ def custos_produtos(request):
                     f'Custo de {custo.produto} ({custo.sabor}) atualizado.',
                 )
             return redirect('custos_produtos')
-    else:
-        initial = {}
-        edit_id = request.GET.get('edit')
-        if edit_id:
-            existente = get_object_or_404(CustoProduto, pk=edit_id)
-            initial = {
-                'produto': existente.produto,
-                'sabor': existente.sabor,
-                'custo_producao': existente.custo_producao,
+    elif custo_em_edicao is not None:
+        form = CustoProdutoForm(
+            initial={
+                'produto': custo_em_edicao.produto,
+                'sabor': custo_em_edicao.sabor,
+                'custo_producao': custo_em_edicao.custo_producao,
             }
-        form = CustoProdutoForm(initial=initial)
+        )
+    else:
+        form = CustoProdutoForm()
 
     custos = CustoProduto.objects.order_by('produto', 'sabor')
     return render(
@@ -285,7 +289,35 @@ def custos_produtos(request):
         {
             'form': form,
             'custos': custos,
-            'editando': bool(request.GET.get('edit') or request.POST.get('edit')),
-            'edit_id': request.GET.get('edit') or request.POST.get('edit', ''),
+            'editando': custo_em_edicao is not None,
+            'edit_id': edit_id or '',
+        },
+    )
+
+
+@login_required
+def excluir_custo_produto(request, pk):
+    custo = get_object_or_404(CustoProduto, pk=pk)
+    encomendas_relacionadas = Encomenda.objects.filter(
+        produto=custo.produto,
+        sabor=custo.sabor,
+    ).count()
+
+    if request.method == 'POST':
+        produto = custo.produto
+        sabor = custo.sabor
+        custo.delete()
+        messages.success(
+            request,
+            f'Custo de {produto} ({sabor}) foi excluído.',
+        )
+        return redirect('custos_produtos')
+
+    return render(
+        request,
+        'excluir_custo.html',
+        {
+            'custo': custo,
+            'encomendas_relacionadas': encomendas_relacionadas,
         },
     )

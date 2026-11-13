@@ -16,6 +16,8 @@
       --ok-bg: #e8f5ee;
       --error: #9b1c1c;
       --error-bg: #fde8e8;
+      --danger: #9b1c1c;
+      --danger-bg: #fde8e8;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -190,16 +192,35 @@
     }
     .custo-name { font-size: 13px; font-weight: 700; }
     .custo-meta { font-size: 11px; color: var(--muted); }
-    .custo-card a {
-      color: inherit;
+    .custo-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn-editar-custo,
+    .btn-excluir-custo {
+      flex: 1;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 12px;
       font-weight: 700;
       text-decoration: none;
-      min-width: 44px;
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: flex-end;
+      box-sizing: border-box;
+    }
+    .btn-editar-custo {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--fg);
+    }
+    .btn-excluir-custo {
+      border: 1px dashed var(--danger);
+      background: var(--danger-bg);
+      color: var(--danger);
     }
     .empty {
       border: 1px dashed var(--line-soft);
@@ -313,12 +334,18 @@
         <article class="custo-card">
           <div class="custo-top">
             <span class="custo-name">{{ custo.produto }} — {{ custo.sabor }}</span>
-            <a href="?edit={{ custo.pk }}">Editar</a>
           </div>
           <span class="custo-meta">
             Custo R$ {{ custo.custo_producao }}
             · Atualizado em {{ custo.data_atualizacao|date:"d/m/Y H:i" }}
           </span>
+          <div class="custo-actions">
+            <a class="btn-editar-custo" href="?edit={{ custo.pk }}">Editar</a>
+            <a
+              class="btn-excluir-custo"
+              href="{% url 'excluir_custo_produto' custo.pk %}"
+            >Excluir</a>
+          </div>
         </article>
       {% empty %}
         <div class="empty">Nenhum custo cadastrado ainda.</div>
