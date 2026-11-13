@@ -426,3 +426,54 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         )
         self.assertNotContains(listagem_response, 'Cobrado R$ 180.00')
         self.assertNotContains(listagem_response, 'Margem R$ 95.00')
+
+    def test_exclusao_de_encomenda_exige_post_e_some_da_listagem(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Beatriz',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-18',
+                'valor_cobrado': '160.00',
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+
+        encomenda = Encomenda.objects.get()
+        pk = encomenda.pk
+
+        confirmacao_get = self.client.get(
+            reverse('excluir_encomenda', args=[pk]),
+        )
+        self.assertEqual(confirmacao_get.status_code, 200)
+        self.assertContains(confirmacao_get, 'Beatriz')
+        self.assertContains(confirmacao_get, 'Bolo')
+        self.assertContains(confirmacao_get, '18/11/2026')
+        self.assertTrue(Encomenda.objects.filter(pk=pk).exists())
+
+        listagem_apos_get = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem_apos_get, 'Beatriz — Bolo')
+
+        exclusao_post = self.client.post(
+            reverse('excluir_encomenda', args=[pk]),
+        )
+        self.assertEqual(exclusao_post.status_code, 302)
+        self.assertEqual(exclusao_post.url, reverse('minhas_encomendas'))
+        self.assertFalse(Encomenda.objects.filter(pk=pk).exists())
+
+        listagem_apos_post = self.client.get(reverse('minhas_encomendas'))
+        self.assertNotContains(listagem_apos_post, 'Beatriz — Bolo')
+        self.assertContains(
+            listagem_apos_post,
+            'Encomenda de Beatriz foi excluída.',
+        )
