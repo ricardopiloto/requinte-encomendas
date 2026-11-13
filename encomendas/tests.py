@@ -240,3 +240,51 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             listagem_response,
             'Encomenda de Maria salva com sucesso.',
         )
+
+    def test_custo_via_tela_reflete_margem_na_listagem(self):
+        custo_producao = Decimal('70.00')
+        valor_cobrado = Decimal('180.00')
+        margem_esperada = valor_cobrado - custo_producao
+
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        custo_response = self.client.post(
+            reverse('custos_produtos'),
+            {
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'custo_producao': str(custo_producao),
+            },
+        )
+        self.assertEqual(custo_response.status_code, 302)
+        self.assertEqual(custo_response.url, reverse('custos_produtos'))
+
+        custo = CustoProduto.objects.get(produto='Bolo', sabor='Chocolate')
+        self.assertEqual(custo.custo_producao, custo_producao)
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Maria',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-14',
+                'valor_cobrado': str(valor_cobrado),
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+        self.assertEqual(cadastro_response.url, reverse('minhas_encomendas'))
+
+        listagem_response = self.client.get(reverse('minhas_encomendas'))
+        self.assertEqual(listagem_response.status_code, 200)
+        self.assertContains(
+            listagem_response,
+            f'Margem R$ {margem_esperada:.2f}',
+        )
