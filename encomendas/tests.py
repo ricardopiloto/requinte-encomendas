@@ -792,3 +792,47 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         pos_vera = conteudo.index('Vera — Bolo')
         self.assertLess(pos_ana, pos_paula)
         self.assertLess(pos_paula, pos_vera)
+
+    def test_aviso_na_home_conta_entregas_de_hoje_e_amanha(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        hoje = timezone.localdate()
+        amanha = hoje + timedelta(days=1)
+        distante = hoje + timedelta(days=10)
+
+        def data_br(valor):
+            return valor.strftime('%d/%m/%Y')
+
+        for cliente, data_entrega in (
+            ('Clara', hoje),
+            ('Dora', amanha),
+            ('Elisa', distante),
+        ):
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_br(data_entrega),
+                    'valor_cobrado': '180.00',
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(Encomenda.objects.count(), 3)
+
+        home = self.client.get(reverse('home'))
+        self.assertEqual(home.status_code, 200)
+        self.assertEqual(home.context['entregas_proximas'], 2)
+        self.assertContains(home, '⚠')
+        self.assertContains(home, '2 entregas para hoje ou amanhã')
+        self.assertContains(home, 'status-icone')
+        self.assertContains(home, 'status-texto')
+        self.assertNotContains(home, '3 entregas para hoje ou amanhã')
