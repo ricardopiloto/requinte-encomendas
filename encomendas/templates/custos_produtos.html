@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Custos de produtos — Ateliê do Requinte</title>
+  <style>
+    :root {
+      --bg: #eceae6;
+      --panel: #ffffff;
+      --line: #9b9b93;
+      --line-soft: #c9c7c0;
+      --fg: #2b2a27;
+      --muted: #6b6a64;
+      --ok: #2f7d4f;
+      --ok-bg: #e8f5ee;
+      --error: #9b1c1c;
+      --error-bg: #fde8e8;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+    .app {
+      width: min(100%, 380px);
+      min-height: calc(100vh - 32px);
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border: 2px solid var(--fg);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 14px 10px;
+      border-bottom: 1px dashed var(--line-soft);
+    }
+    .topbar a {
+      color: inherit;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 16px;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .content {
+      padding: 16px 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .messages {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .messages .success {
+      padding: 0.75rem 0.85rem;
+      border-radius: 8px;
+      background: var(--ok-bg);
+      color: var(--ok);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .custo-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    .row2 {
+      display: flex;
+      gap: 8px;
+    }
+    .row2 .field { flex: 1; }
+    .input {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 11px 10px;
+      font-size: 13px;
+      color: var(--fg);
+      background: #fbfbfa;
+      min-height: 44px;
+      width: 100%;
+      font-family: inherit;
+    }
+    .input[aria-invalid="true"] {
+      border-color: var(--error);
+      background: #fff8f8;
+    }
+    .errorlist {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .errorlist li {
+      color: var(--error);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .form-errors {
+      padding: 0.65rem 0.75rem;
+      border-radius: 0.4rem;
+      background: var(--error-bg);
+      color: var(--error);
+      font-size: 0.875rem;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-primary,
+    .btn-secondary {
+      flex: 1;
+      border-radius: 8px;
+      padding: 14px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-primary {
+      border: 1px solid var(--fg);
+      background: var(--fg);
+      color: var(--panel);
+    }
+    .btn-secondary {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--fg);
+    }
+    .custo-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .custo-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .custo-name { font-size: 13px; font-weight: 700; }
+    .custo-meta { font-size: 11px; color: var(--muted); }
+    .custo-card a {
+      color: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .empty {
+      border: 1px dashed var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .bottomnav {
+      display: flex;
+      border-top: 1px solid var(--line-soft);
+    }
+    .bottomnav a,
+    .bottomnav button {
+      flex: 1;
+      text-align: center;
+      padding: 10px 4px;
+      font-size: 10px;
+      color: var(--muted);
+      min-width: 44px;
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: transparent;
+      border: 0;
+      text-decoration: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .bottomnav .active {
+      color: var(--fg);
+      font-weight: 700;
+    }
+    .bottomnav .dot {
+      width: 18px;
+      height: 18px;
+      border: 1px dashed var(--line-soft);
+      border-radius: 5px;
+    }
+    .bottomnav form {
+      flex: 1;
+      display: flex;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a href="{% url 'home' %}">← Custos de produtos</a>
+    </header>
+
+    <main class="content">
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <span class="section-label">
+        {% if editando %}Editar custo{% else %}Novo custo{% endif %}
+      </span>
+
+      <form method="post" class="custo-form" novalidate>
+        {% csrf_token %}
+        {% if edit_id %}
+          <input type="hidden" name="edit" value="{{ edit_id }}">
+        {% endif %}
+
+        {% if form.non_field_errors %}
+          <div class="form-errors">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="row2">
+          <div class="field">
+            <label class="label" for="{{ form.produto.id_for_label }}">Produto *</label>
+            {{ form.produto }}
+            {{ form.produto.errors }}
+          </div>
+          <div class="field">
+            <label class="label" for="{{ form.sabor.id_for_label }}">Sabor *</label>
+            {{ form.sabor }}
+            {{ form.sabor.errors }}
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="{{ form.custo_producao.id_for_label }}">Custo de produção *</label>
+          {{ form.custo_producao }}
+          {{ form.custo_producao.errors }}
+        </div>
+
+        <div class="actions">
+          {% if editando %}
+            <a class="btn-secondary" href="{% url 'custos_produtos' %}">Cancelar</a>
+          {% endif %}
+          <button class="btn-primary" type="submit">
+            {% if editando %}Atualizar custo{% else %}Salvar custo{% endif %}
+          </button>
+        </div>
+      </form>
+
+      <span class="section-label">Custos cadastrados</span>
+
+      {% for custo in custos %}
+        <article class="custo-card">
+          <div class="custo-top">
+            <span class="custo-name">{{ custo.produto }} — {{ custo.sabor }}</span>
+            <a href="?edit={{ custo.pk }}">Editar</a>
+          </div>
+          <span class="custo-meta">
+            Custo R$ {{ custo.custo_producao }}
+            · Atualizado em {{ custo.data_atualizacao|date:"d/m/Y H:i" }}
+          </span>
+        </article>
+      {% empty %}
+        <div class="empty">Nenhum custo cadastrado ainda.</div>
+      {% endfor %}
+    </main>
+
+    <nav class="bottomnav" aria-label="Navegação principal">
+      <a href="{% url 'home' %}">
+        <span class="dot" aria-hidden="true"></span>
+        Início
+      </a>
+      <a href="{% url 'minhas_encomendas' %}">
+        <span class="dot" aria-hidden="true"></span>
+        Encomendas
+      </a>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit">
+          <span class="dot" aria-hidden="true"></span>
+          Sair
+        </button>
+      </form>
+    </nav>
+  </div>
+</body>
+</html>

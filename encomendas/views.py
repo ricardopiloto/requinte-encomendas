@@ -2,10 +2,9 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import DecimalField, OuterRef, Subquery
-from django.http import HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import EncomendaForm
+from .forms import CustoProdutoForm, EncomendaForm
 from .models import CustoProduto, Encomenda
 
 STATUS_FILTROS = [
@@ -141,4 +140,41 @@ def minhas_encomendas(request):
 
 @login_required
 def custos_produtos(request):
-    return HttpResponse('Custos de produtos — em breve')
+    if request.method == 'POST':
+        form = CustoProdutoForm(request.POST)
+        if form.is_valid():
+            custo = form.save()
+            if form.created:
+                messages.success(
+                    request,
+                    f'Custo de {custo.produto} ({custo.sabor}) cadastrado.',
+                )
+            else:
+                messages.success(
+                    request,
+                    f'Custo de {custo.produto} ({custo.sabor}) atualizado.',
+                )
+            return redirect('custos_produtos')
+    else:
+        initial = {}
+        edit_id = request.GET.get('edit')
+        if edit_id:
+            existente = get_object_or_404(CustoProduto, pk=edit_id)
+            initial = {
+                'produto': existente.produto,
+                'sabor': existente.sabor,
+                'custo_producao': existente.custo_producao,
+            }
+        form = CustoProdutoForm(initial=initial)
+
+    custos = CustoProduto.objects.order_by('produto', 'sabor')
+    return render(
+        request,
+        'custos_produtos.html',
+        {
+            'form': form,
+            'custos': custos,
+            'editando': bool(request.GET.get('edit') or request.POST.get('edit')),
+            'edit_id': request.GET.get('edit') or request.POST.get('edit', ''),
+        },
+    )
