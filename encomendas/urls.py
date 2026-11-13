@@ -22,6 +22,7 @@ urlpatterns = [
         name='avancar_status_encomenda',
     ),
     path('encomendas/', views.minhas_encomendas, name='minhas_encomendas'),
+    path('resumo/', views.resumo_financeiro, name='resumo_financeiro'),
     path('custos/', views.custos_produtos, name='custos_produtos'),
     path(
         'custos/<int:pk>/excluir/',
