@@ -33,8 +33,13 @@ class EncomendaForm(forms.ModelForm):
             'produto': forms.TextInput(attrs={'placeholder': 'Bolo'}),
             'sabor': forms.TextInput(attrs={'placeholder': 'Chocolate'}),
             'data_entrega': forms.DateInput(
-                format='%Y-%m-%d',
-                attrs={'type': 'date'},
+                format='%d/%m/%Y',
+                attrs={
+                    'type': 'text',
+                    'placeholder': 'dd/mm/aaaa',
+                    'inputmode': 'numeric',
+                    'autocomplete': 'off',
+                },
             ),
             'valor_cobrado': forms.NumberInput(
                 attrs={
@@ -68,6 +73,7 @@ class EncomendaForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk and not self.is_bound:
             self.fields['cliente'].initial = self.instance.cliente.nome
+        self.fields['data_entrega'].input_formats = ['%d/%m/%Y']
         for name, field in self.fields.items():
             field.required = True
             css = field.widget.attrs.get('class', '')

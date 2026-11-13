@@ -6,12 +6,17 @@ from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, OuterRef, Subquery
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils.formats import number_format
 
 from .forms import EncomendaForm
 from .models import Cliente, CustoProduto, Encomenda
 from .views import _montar_itens_encomenda
 
 User = get_user_model()
+
+
+def _moeda(valor):
+    return f'R$ {number_format(valor, decimal_pos=2, use_l10n=True)}'
 
 
 def _queryset_com_custo():
@@ -71,7 +76,7 @@ class MargemCalculoTests(TestCase):
         for produto, sabor, _, margem_esperada in casos:
             item = itens[(produto, sabor)]
             self.assertEqual(item['margem_valor'], margem_esperada)
-            self.assertEqual(item['margem_texto'], f'R$ {margem_esperada:.2f}')
+            self.assertEqual(item['margem_texto'], _moeda(margem_esperada))
 
     def test_margem_quando_custo_nao_cadastrado(self):
         Encomenda.objects.create(
@@ -108,7 +113,7 @@ class EncomendaFormValidationTests(TestCase):
             'cliente': 'Maria',
             'produto': 'Bolo',
             'sabor': 'Chocolate',
-            'data_entrega': '2026-11-14',
+            'data_entrega': '14/11/2026',
             'valor_cobrado': '180.00',
         }
 
@@ -211,7 +216,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Maria',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-14',
+                'data_entrega': '14/11/2026',
                 'valor_cobrado': '180.00',
             },
         )
@@ -224,6 +229,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertEqual(encomenda.sabor, 'Chocolate')
         self.assertEqual(encomenda.status, Encomenda.Status.PENDENTE)
         self.assertEqual(encomenda.valor_cobrado, Decimal('180.00'))
+        self.assertEqual(encomenda.data_entrega, date(2026, 11, 14))
 
         listagem_response = self.client.get(reverse('minhas_encomendas'))
         self.assertEqual(listagem_response.status_code, 200)
@@ -234,8 +240,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertIn('Pendente', conteudo)
         self.assertIn('⏳', conteudo)
         self.assertIn('Entrega: 14/11/2026', conteudo)
-        self.assertIn('Cobrado R$ 180.00', conteudo)
-        self.assertIn('Margem R$ 95.00', conteudo)
+        self.assertIn(_moeda(Decimal('180.00')), conteudo)
+        self.assertIn(f'Margem {_moeda(Decimal("95.00"))}', conteudo)
         self.assertContains(
             listagem_response,
             'Encomenda de Maria salva com sucesso.',
@@ -275,7 +281,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Maria',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-14',
+                'data_entrega': '14/11/2026',
                 'valor_cobrado': str(valor_cobrado),
             },
         )
@@ -286,7 +292,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertEqual(listagem_response.status_code, 200)
         self.assertContains(
             listagem_response,
-            f'Margem R$ {margem_esperada:.2f}',
+            f'Margem {_moeda(margem_esperada)}',
         )
 
     def test_avanco_de_status_na_listagem_sem_retrocesso(self):
@@ -305,7 +311,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Carla',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-15',
+                'data_entrega': '15/11/2026',
                 'valor_cobrado': '150.00',
             },
         )
@@ -388,7 +394,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Juliana',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-16',
+                'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_inicial),
             },
         )
@@ -403,7 +409,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Juliana',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-16',
+                'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_atualizado),
             },
         )
@@ -415,17 +421,20 @@ class FluxoEncomendaIntegracaoTests(TestCase):
 
         listagem_response = self.client.get(reverse('minhas_encomendas'))
         self.assertEqual(listagem_response.status_code, 200)
-        self.assertContains(listagem_response, 'Cobrado R$ 220.00')
+        self.assertContains(listagem_response, f'Cobrado {_moeda(valor_atualizado)}')
         self.assertContains(
             listagem_response,
-            f'Margem R$ {margem_atualizada:.2f}',
+            f'Margem {_moeda(margem_atualizada)}',
         )
         self.assertContains(
             listagem_response,
             'Dados da encomenda de Juliana atualizados.',
         )
-        self.assertNotContains(listagem_response, 'Cobrado R$ 180.00')
-        self.assertNotContains(listagem_response, 'Margem R$ 95.00')
+        self.assertNotContains(listagem_response, f'Cobrado {_moeda(valor_inicial)}')
+        self.assertNotContains(
+            listagem_response,
+            f'Margem {_moeda(Decimal("95.00"))}',
+        )
 
     def test_exclusao_de_encomenda_exige_post_e_some_da_listagem(self):
         login_response = self.client.post(
@@ -443,7 +452,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
                 'cliente': 'Beatriz',
                 'produto': 'Bolo',
                 'sabor': 'Chocolate',
-                'data_entrega': '2026-11-18',
+                'data_entrega': '18/11/2026',
                 'valor_cobrado': '160.00',
             },
         )

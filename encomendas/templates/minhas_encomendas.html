@@ -325,7 +325,7 @@
             Entrega: {{ item.encomenda.data_entrega|date:"d/m/Y" }}
           </span>
           <div class="order-margin">
-            <span>Cobrado R$ {{ item.encomenda.valor_cobrado }}</span>
+            <span>Cobrado R$ {{ item.encomenda.valor_cobrado|floatformat:2 }}</span>
             {% if item.margem_valor is None %}
               <span class="margem-ausente">{{ item.margem_texto }}</span>
             {% else %}

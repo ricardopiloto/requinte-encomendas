@@ -336,7 +336,7 @@
             <span class="custo-name">{{ custo.produto }} — {{ custo.sabor }}</span>
           </div>
           <span class="custo-meta">
-            Custo R$ {{ custo.custo_producao }}
+            Custo R$ {{ custo.custo_producao|floatformat:2 }}
             · Atualizado em {{ custo.data_atualizacao|date:"d/m/Y H:i" }}
           </span>
           <div class="custo-actions">

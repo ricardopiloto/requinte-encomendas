@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db.models import DecimalField, OuterRef, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.formats import number_format
 from django.views.decorators.http import require_POST
 
 from .forms import CustoProdutoForm, EncomendaForm
@@ -66,7 +67,9 @@ def _montar_itens_encomenda(encomendas):
             margem_valor = None
         else:
             margem_valor = encomenda.valor_cobrado - custo
-            margem_texto = f'R$ {margem_valor:.2f}'
+            margem_texto = (
+                f'R$ {number_format(margem_valor, decimal_pos=2, use_l10n=True)}'
+            )
 
         proximo_status = STATUS_AVANCO.get(encomenda.status)
         proximo_meta = STATUS_META.get(proximo_status) if proximo_status else None
