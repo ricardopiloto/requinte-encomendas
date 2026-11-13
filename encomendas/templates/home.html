@@ -12,6 +12,7 @@
       --line-soft: #c9c7c0;
       --fg: #2b2a27;
       --muted: #6b6a64;
+      --warn: #9a6b16;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -71,6 +72,33 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--muted);
+    }
+    .aviso-prazo {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      align-self: flex-start;
+      border-radius: 20px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid currentColor;
+      color: var(--warn);
+      text-decoration: none;
+      min-width: 44px;
+      min-height: 44px;
+      box-sizing: border-box;
+    }
+    .aviso-prazo:focus-visible {
+      outline: 2px solid var(--fg);
+      outline-offset: 2px;
+    }
+    .aviso-prazo .status-icone {
+      font-style: normal;
+      line-height: 1;
+    }
+    .aviso-prazo .status-texto {
+      line-height: 1.3;
     }
     .menu-item {
       border: 1px solid var(--line);
@@ -161,6 +189,23 @@
     <main class="content">
       <span class="label">Olá, {{ display_name }}</span>
 
+      {% if entregas_proximas %}
+        <a
+          class="aviso-prazo"
+          href="{% url 'minhas_encomendas' %}"
+          role="status"
+        >
+          <span class="status-icone" aria-hidden="true">⚠</span>
+          <span class="status-texto">
+            {% if entregas_proximas == 1 %}
+              1 entrega para hoje ou amanhã
+            {% else %}
+              {{ entregas_proximas }} entregas para hoje ou amanhã
+            {% endif %}
+          </span>
+        </a>
+      {% endif %}
+
       <a class="menu-item" href="{% url 'nova_encomenda' %}">
         <div class="ico" aria-hidden="true">+</div>
         <div>
@@ -182,6 +227,14 @@
         <div>
           <div class="txt">Custos de produtos</div>
           <div class="sub">preço e margem por item</div>
+        </div>
+      </a>
+
+      <a class="menu-item" href="{% url 'resumo_financeiro' %}">
+        <div class="ico" aria-hidden="true">Σ</div>
+        <div>
+          <div class="txt">Resumo financeiro</div>
+          <div class="sub">margem da semana e do mês</div>
         </div>
       </a>
     </main>

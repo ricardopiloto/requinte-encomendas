@@ -96,9 +96,26 @@
       width: 100%;
       font-family: inherit;
     }
+    select.input {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px);
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+      padding-right: 32px;
+    }
     .input[aria-invalid="true"] {
       border-color: var(--error);
       background: #fff8f8;
+    }
+    .outro-fields {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .outro-fields.is-visible {
+      display: flex;
     }
     .errorlist {
       margin: 0;
@@ -116,6 +133,47 @@
       background: var(--error-bg);
       color: var(--error);
       font-size: 0.875rem;
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .preco-preview {
+      border: 1px dashed var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #fbfbfa;
+    }
+    .preco-preview .linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .preco-preview .rotulo {
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 10px;
+    }
+    .preco-preview .valor {
+      font-weight: 700;
+      text-align: right;
+    }
+    .preco-preview .valor.ausente {
+      font-style: italic;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .preco-preview .nota {
+      margin: 0;
+      font-size: 11px;
+      color: var(--muted);
     }
     .actions {
       margin-top: auto;
@@ -171,16 +229,28 @@
           {{ form.cliente.errors }}
         </div>
 
-        <div class="row2">
-          <div class="field">
-            <label class="label" for="{{ form.produto.id_for_label }}">Produto *</label>
-            {{ form.produto }}
-            {{ form.produto.errors }}
-          </div>
-          <div class="field">
-            <label class="label" for="{{ form.sabor.id_for_label }}">Sabor *</label>
-            {{ form.sabor }}
-            {{ form.sabor.errors }}
+        <div class="field">
+          <label class="label" for="{{ form.item.id_for_label }}">Produto e sabor *</label>
+          {{ form.item }}
+          {{ form.item.errors }}
+          <p class="hint">Lista baseada nos custos cadastrados. Use “Outro” para um item novo.</p>
+        </div>
+
+        <div
+          id="outro-fields"
+          class="outro-fields{% if form.item.value == '__outro__' or form.produto_outro.errors or form.sabor_outro.errors %} is-visible{% endif %}"
+        >
+          <div class="row2">
+            <div class="field">
+              <label class="label" for="{{ form.produto_outro.id_for_label }}">Produto *</label>
+              {{ form.produto_outro }}
+              {{ form.produto_outro.errors }}
+            </div>
+            <div class="field">
+              <label class="label" for="{{ form.sabor_outro.id_for_label }}">Sabor *</label>
+              {{ form.sabor_outro }}
+              {{ form.sabor_outro.errors }}
+            </div>
           </div>
         </div>
 
@@ -197,6 +267,18 @@
           </div>
         </div>
 
+        <div class="preco-preview" aria-live="polite">
+          <div class="linha">
+            <span class="rotulo">Custo de produção</span>
+            <span class="valor" id="preview-custo">—</span>
+          </div>
+          <div class="linha">
+            <span class="rotulo">Margem estimada</span>
+            <span class="valor" id="preview-margem">—</span>
+          </div>
+          <p class="nota">Apoio à precificação. Não impede salvar a encomenda.</p>
+        </div>
+
         <div class="actions">
           <a class="btn-secondary" href="{{ cancel_url }}">Cancelar</a>
           <button class="btn-primary" type="submit">{{ botao_salvar }}</button>
@@ -204,5 +286,118 @@
       </form>
     </main>
   </div>
+  {{ form.custos_json|json_script:"custos-data" }}
+  <script>
+    (function () {
+      var select = document.getElementById('id_item');
+      var outro = document.getElementById('outro-fields');
+      var valorInput = document.getElementById('id_valor_cobrado');
+      var produtoOutro = document.getElementById('id_produto_outro');
+      var saborOutro = document.getElementById('id_sabor_outro');
+      var previewCusto = document.getElementById('preview-custo');
+      var previewMargem = document.getElementById('preview-margem');
+      var dataEl = document.getElementById('custos-data');
+      if (!select || !outro || !previewCusto || !previewMargem || !dataEl) return;
+
+      var data = JSON.parse(dataEl.textContent);
+      var CUSTO_AUSENTE = 'custo não cadastrado';
+
+      function formatMoney(valor) {
+        return 'R$ ' + Number(valor).toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+      }
+
+      function parseValorCobrado(raw) {
+        if (!raw) return null;
+        var normalized = String(raw).trim().replace(/\s/g, '');
+        if (!normalized) return null;
+        if (normalized.indexOf(',') >= 0) {
+          normalized = normalized.replace(/\./g, '').replace(',', '.');
+        }
+        var numero = Number(normalized);
+        return Number.isFinite(numero) ? numero : null;
+      }
+
+      function syncOutroFields() {
+        if (select.value === data.outro) {
+          outro.classList.add('is-visible');
+        } else {
+          outro.classList.remove('is-visible');
+        }
+      }
+
+      function custoAtual() {
+        var item = select.value;
+        if (!item) return null;
+        if (item !== data.outro) {
+          return Object.prototype.hasOwnProperty.call(data.por_item, item)
+            ? Number(data.por_item[item])
+            : null;
+        }
+        var produto = (produtoOutro && produtoOutro.value || '').trim().toLowerCase();
+        var sabor = (saborOutro && saborOutro.value || '').trim().toLowerCase();
+        if (!produto || !sabor) return null;
+        var chave = produto + '|' + sabor;
+        return Object.prototype.hasOwnProperty.call(data.por_par, chave)
+          ? Number(data.por_par[chave])
+          : null;
+      }
+
+      function atualizarPreview() {
+        var item = select.value;
+        var custo = custoAtual();
+        var cobrado = valorInput ? parseValorCobrado(valorInput.value) : null;
+
+        if (!item) {
+          previewCusto.textContent = '—';
+          previewCusto.classList.add('ausente');
+          previewMargem.textContent = '—';
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        if (custo === null) {
+          previewCusto.textContent = CUSTO_AUSENTE;
+          previewCusto.classList.add('ausente');
+          previewMargem.textContent = CUSTO_AUSENTE;
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        previewCusto.textContent = formatMoney(custo);
+        previewCusto.classList.remove('ausente');
+
+        if (cobrado === null) {
+          previewMargem.textContent = 'informe o valor cobrado';
+          previewMargem.classList.add('ausente');
+          return;
+        }
+
+        previewMargem.textContent = formatMoney(cobrado - custo);
+        previewMargem.classList.remove('ausente');
+      }
+
+      select.addEventListener('change', function () {
+        syncOutroFields();
+        atualizarPreview();
+      });
+      if (valorInput) {
+        valorInput.addEventListener('input', atualizarPreview);
+        valorInput.addEventListener('change', atualizarPreview);
+      }
+      if (produtoOutro) {
+        produtoOutro.addEventListener('input', atualizarPreview);
+      }
+      if (saborOutro) {
+        saborOutro.addEventListener('input', atualizarPreview);
+      }
+
+      syncOutroFields();
+      atualizarPreview();
+    })();
+  </script>
 </body>
 </html>
+

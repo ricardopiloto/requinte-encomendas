@@ -1,9 +1,15 @@
+import calendar
+from datetime import timedelta
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import DecimalField, OuterRef, Subquery
+from django.db.models import DecimalField, ExpressionWrapper, F, OuterRef, Subquery, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.formats import number_format
 from django.views.decorators.http import require_POST
 
 from .forms import CustoProdutoForm, EncomendaForm
@@ -43,10 +49,63 @@ STATUS_AVANCO = {
 def _menu_context(user):
     display_name = user.get_short_name() or user.get_username()
     initial = (display_name[:1] or '?').upper()
+    hoje = timezone.localdate()
+    amanha = hoje + timedelta(days=1)
+    entregas_proximas = (
+        Encomenda.objects.filter(
+            data_entrega__gte=hoje,
+            data_entrega__lte=amanha,
+        )
+        .exclude(status=Encomenda.Status.ENTREGUE)
+        .count()
+    )
     return {
         'display_name': display_name,
         'user_initial': initial,
+        'entregas_proximas': entregas_proximas,
     }
+
+
+def _periodo_semana_atual(hoje):
+    inicio = hoje - timedelta(days=hoje.weekday())
+    fim = inicio + timedelta(days=6)
+    return inicio, fim
+
+
+def _periodo_mes_atual(hoje):
+    inicio = hoje.replace(day=1)
+    ultimo_dia = calendar.monthrange(hoje.year, hoje.month)[1]
+    fim = hoje.replace(day=ultimo_dia)
+    return inicio, fim
+
+
+def _total_margem_entregues(data_inicio, data_fim):
+    custo_subquery = CustoProduto.objects.filter(
+        produto=OuterRef('produto'),
+        sabor=OuterRef('sabor'),
+    ).values('custo_producao')[:1]
+
+    agregado = (
+        Encomenda.objects.filter(
+            status=Encomenda.Status.ENTREGUE,
+            data_entrega__gte=data_inicio,
+            data_entrega__lte=data_fim,
+        )
+        .annotate(
+            custo_producao=Subquery(
+                custo_subquery,
+                output_field=DecimalField(max_digits=10, decimal_places=2),
+            )
+        )
+        .annotate(
+            margem=ExpressionWrapper(
+                F('valor_cobrado') - F('custo_producao'),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )
+        .aggregate(total=Sum('margem'))
+    )
+    return agregado['total'] or Decimal('0.00')
 
 
 def _montar_itens_encomenda(encomendas):
@@ -66,7 +125,9 @@ def _montar_itens_encomenda(encomendas):
             margem_valor = None
         else:
             margem_valor = encomenda.valor_cobrado - custo
-            margem_texto = f'R$ {margem_valor:.2f}'
+            margem_texto = (
+                f'R$ {number_format(margem_valor, decimal_pos=2, use_l10n=True)}'
+            )
 
         proximo_status = STATUS_AVANCO.get(encomenda.status)
         proximo_meta = STATUS_META.get(proximo_status) if proximo_status else None
@@ -247,6 +308,30 @@ def avancar_status_encomenda(request, pk):
     if status_filtro and status_filtro != 'todas':
         return redirect(f"{reverse('minhas_encomendas')}?status={status_filtro}")
     return redirect('minhas_encomendas')
+
+
+@login_required
+def resumo_financeiro(request):
+    hoje = timezone.localdate()
+    semana_inicio, semana_fim = _periodo_semana_atual(hoje)
+    mes_inicio, mes_fim = _periodo_mes_atual(hoje)
+
+    margem_semana = _total_margem_entregues(semana_inicio, semana_fim)
+    margem_mes = _total_margem_entregues(mes_inicio, mes_fim)
+
+    return render(
+        request,
+        'resumo_financeiro.html',
+        {
+            'hoje': hoje,
+            'semana_inicio': semana_inicio,
+            'semana_fim': semana_fim,
+            'mes_inicio': mes_inicio,
+            'mes_fim': mes_fim,
+            'margem_semana': margem_semana,
+            'margem_mes': margem_mes,
+        },
+    )
 
 
 @login_required

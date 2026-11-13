@@ -1,4 +1,6 @@
-from datetime import date
+import json
+from calendar import monthrange
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -6,12 +8,18 @@ from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, OuterRef, Subquery
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.formats import number_format
 
-from .forms import EncomendaForm
+from .forms import ITEM_OUTRO, EncomendaForm
 from .models import Cliente, CustoProduto, Encomenda
 from .views import _montar_itens_encomenda
 
 User = get_user_model()
+
+
+def _moeda(valor):
+    return f'R$ {number_format(valor, decimal_pos=2, use_l10n=True)}'
 
 
 def _queryset_com_custo():
@@ -71,7 +79,7 @@ class MargemCalculoTests(TestCase):
         for produto, sabor, _, margem_esperada in casos:
             item = itens[(produto, sabor)]
             self.assertEqual(item['margem_valor'], margem_esperada)
-            self.assertEqual(item['margem_texto'], f'R$ {margem_esperada:.2f}')
+            self.assertEqual(item['margem_texto'], _moeda(margem_esperada))
 
     def test_margem_quando_custo_nao_cadastrado(self):
         Encomenda.objects.create(
@@ -106,26 +114,56 @@ class EncomendaFormValidationTests(TestCase):
     def _dados_validos(self):
         return {
             'cliente': 'Maria',
-            'produto': 'Bolo',
-            'sabor': 'Chocolate',
-            'data_entrega': '2026-11-14',
+            'item': ITEM_OUTRO,
+            'produto_outro': 'Bolo',
+            'sabor_outro': 'Chocolate',
+            'data_entrega': '14/11/2026',
             'valor_cobrado': '180.00',
         }
 
     def test_formulario_valido_com_todos_os_campos(self):
         form = EncomendaForm(data=self._dados_validos())
         self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['produto'], 'Bolo')
+        self.assertEqual(form.cleaned_data['sabor'], 'Chocolate')
+
+    def test_formulario_valido_com_item_cadastrado(self):
+        custo = CustoProduto.objects.create(
+            produto='Bolo',
+            sabor='Chocolate',
+            custo_producao=Decimal('85.00'),
+        )
+        form = EncomendaForm(
+            data={
+                'cliente': 'Maria',
+                'item': str(custo.pk),
+                'data_entrega': '14/11/2026',
+                'valor_cobrado': '180.00',
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['produto'], 'Bolo')
+        self.assertEqual(form.cleaned_data['sabor'], 'Chocolate')
 
     def test_rejeita_quando_campo_obrigatorio_esta_vazio(self):
         campos = [
             'cliente',
-            'produto',
-            'sabor',
+            'item',
             'data_entrega',
             'valor_cobrado',
         ]
 
         for campo in campos:
+            with self.subTest(campo=campo):
+                dados = self._dados_validos()
+                dados[campo] = ''
+                form = EncomendaForm(data=dados)
+
+                self.assertFalse(form.is_valid())
+                self.assertIn(campo, form.errors)
+
+    def test_rejeita_outro_sem_produto_ou_sabor(self):
+        for campo in ('produto_outro', 'sabor_outro'):
             with self.subTest(campo=campo):
                 dados = self._dados_validos()
                 dados[campo] = ''
@@ -188,10 +226,15 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             password=self.password,
             first_name='Deise',
         )
-        CustoProduto.objects.create(
+        self.custo_bolo = CustoProduto.objects.create(
             produto='Bolo',
             sabor='Chocolate',
             custo_producao=Decimal('85.00'),
+        )
+
+    def _item_bolo_chocolate(self):
+        return str(
+            CustoProduto.objects.get(produto='Bolo', sabor='Chocolate').pk
         )
 
     def test_login_cadastro_e_listagem_com_status_e_margem(self):
@@ -209,9 +252,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Maria',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-14',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '14/11/2026',
                 'valor_cobrado': '180.00',
             },
         )
@@ -224,6 +266,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertEqual(encomenda.sabor, 'Chocolate')
         self.assertEqual(encomenda.status, Encomenda.Status.PENDENTE)
         self.assertEqual(encomenda.valor_cobrado, Decimal('180.00'))
+        self.assertEqual(encomenda.data_entrega, date(2026, 11, 14))
 
         listagem_response = self.client.get(reverse('minhas_encomendas'))
         self.assertEqual(listagem_response.status_code, 200)
@@ -234,8 +277,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertIn('Pendente', conteudo)
         self.assertIn('⏳', conteudo)
         self.assertIn('Entrega: 14/11/2026', conteudo)
-        self.assertIn('Cobrado R$ 180.00', conteudo)
-        self.assertIn('Margem R$ 95.00', conteudo)
+        self.assertIn(_moeda(Decimal('180.00')), conteudo)
+        self.assertIn(f'Margem {_moeda(Decimal("95.00"))}', conteudo)
         self.assertContains(
             listagem_response,
             'Encomenda de Maria salva com sucesso.',
@@ -273,9 +316,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Maria',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-14',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '14/11/2026',
                 'valor_cobrado': str(valor_cobrado),
             },
         )
@@ -286,7 +328,7 @@ class FluxoEncomendaIntegracaoTests(TestCase):
         self.assertEqual(listagem_response.status_code, 200)
         self.assertContains(
             listagem_response,
-            f'Margem R$ {margem_esperada:.2f}',
+            f'Margem {_moeda(margem_esperada)}',
         )
 
     def test_avanco_de_status_na_listagem_sem_retrocesso(self):
@@ -303,9 +345,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Carla',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-15',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '15/11/2026',
                 'valor_cobrado': '150.00',
             },
         )
@@ -386,9 +427,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Juliana',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-16',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_inicial),
             },
         )
@@ -401,9 +441,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('editar_encomenda', args=[encomenda.pk]),
             {
                 'cliente': 'Juliana',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-16',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '16/11/2026',
                 'valor_cobrado': str(valor_atualizado),
             },
         )
@@ -415,17 +454,20 @@ class FluxoEncomendaIntegracaoTests(TestCase):
 
         listagem_response = self.client.get(reverse('minhas_encomendas'))
         self.assertEqual(listagem_response.status_code, 200)
-        self.assertContains(listagem_response, 'Cobrado R$ 220.00')
+        self.assertContains(listagem_response, f'Cobrado {_moeda(valor_atualizado)}')
         self.assertContains(
             listagem_response,
-            f'Margem R$ {margem_atualizada:.2f}',
+            f'Margem {_moeda(margem_atualizada)}',
         )
         self.assertContains(
             listagem_response,
             'Dados da encomenda de Juliana atualizados.',
         )
-        self.assertNotContains(listagem_response, 'Cobrado R$ 180.00')
-        self.assertNotContains(listagem_response, 'Margem R$ 95.00')
+        self.assertNotContains(listagem_response, f'Cobrado {_moeda(valor_inicial)}')
+        self.assertNotContains(
+            listagem_response,
+            f'Margem {_moeda(Decimal("95.00"))}',
+        )
 
     def test_exclusao_de_encomenda_exige_post_e_some_da_listagem(self):
         login_response = self.client.post(
@@ -441,9 +483,8 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             reverse('nova_encomenda'),
             {
                 'cliente': 'Beatriz',
-                'produto': 'Bolo',
-                'sabor': 'Chocolate',
-                'data_entrega': '2026-11-18',
+                'item': self._item_bolo_chocolate(),
+                'data_entrega': '18/11/2026',
                 'valor_cobrado': '160.00',
             },
         )
@@ -477,3 +518,321 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             listagem_apos_post,
             'Encomenda de Beatriz foi excluída.',
         )
+
+    def test_formulario_exibe_opcoes_de_custo_produto(self):
+        CustoProduto.objects.create(
+            produto='Docinho',
+            sabor='Brigadeiro',
+            custo_producao=Decimal('40.00'),
+        )
+
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'Bolo (Chocolate)')
+        self.assertContains(formulario, 'Docinho (Brigadeiro)')
+        self.assertContains(formulario, 'Outro (informar manualmente)')
+        self.assertContains(
+            formulario,
+            f'value="{self._item_bolo_chocolate()}"',
+        )
+        self.assertContains(formulario, f'value="{ITEM_OUTRO}"')
+
+    def test_opcao_outro_cadastra_encomenda_sem_custo_existente(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        self.assertFalse(
+            CustoProduto.objects.filter(
+                produto='Torta',
+                sabor='Limão',
+            ).exists()
+        )
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Helena',
+                'item': ITEM_OUTRO,
+                'produto_outro': 'Torta',
+                'sabor_outro': 'Limão',
+                'data_entrega': '20/11/2026',
+                'valor_cobrado': '95.00',
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+        self.assertEqual(cadastro_response.url, reverse('minhas_encomendas'))
+
+        encomenda = Encomenda.objects.get()
+        self.assertEqual(encomenda.cliente.nome, 'Helena')
+        self.assertEqual(encomenda.produto, 'Torta')
+        self.assertEqual(encomenda.sabor, 'Limão')
+        self.assertFalse(
+            CustoProduto.objects.filter(
+                produto='Torta',
+                sabor='Limão',
+            ).exists()
+        )
+
+        listagem = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem, 'Helena — Torta')
+        self.assertContains(listagem, 'custo não cadastrado')
+
+    def test_cadastro_exibe_custo_de_producao_do_item_selecionavel(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'id="preview-custo"')
+        self.assertContains(formulario, 'id="preview-margem"')
+        self.assertContains(formulario, 'id="custos-data"')
+
+        custos = json.loads(formulario.context['form'].custos_json)
+        item_id = self._item_bolo_chocolate()
+        self.assertIn(item_id, custos['por_item'])
+        self.assertEqual(
+            Decimal(custos['por_item'][item_id]),
+            Decimal('85.00'),
+        )
+        self.assertEqual(
+            Decimal(custos['por_par']['bolo|chocolate']),
+            Decimal('85.00'),
+        )
+
+    def test_cadastro_indica_custo_nao_cadastrado_quando_sem_custo(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        formulario = self.client.get(reverse('nova_encomenda'))
+        self.assertEqual(formulario.status_code, 200)
+        self.assertContains(formulario, 'custo não cadastrado')
+
+        custos = json.loads(formulario.context['form'].custos_json)
+        self.assertNotIn('torta|limão', custos['por_par'])
+        self.assertEqual(custos['outro'], ITEM_OUTRO)
+        self.assertNotIn(ITEM_OUTRO, custos['por_item'])
+
+    def test_resumo_financeiro_soma_margens_entregues_por_periodo(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        hoje = timezone.localdate()
+        semana_inicio = hoje - timedelta(days=hoje.weekday())
+        semana_fim = semana_inicio + timedelta(days=6)
+        mes_inicio = hoje.replace(day=1)
+        mes_fim = hoje.replace(day=monthrange(hoje.year, hoje.month)[1])
+
+        data_na_semana = hoje
+        data_mes_fora_semana = next(
+            mes_inicio + timedelta(days=offset)
+            for offset in range((mes_fim - mes_inicio).days + 1)
+            if not (
+                semana_inicio
+                <= mes_inicio + timedelta(days=offset)
+                <= semana_fim
+            )
+        )
+        data_fora_mes = mes_inicio - timedelta(days=1)
+
+        def data_br(valor):
+            return valor.strftime('%d/%m/%Y')
+
+        def cadastrar(cliente, data_entrega, valor_cobrado):
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_br(data_entrega),
+                    'valor_cobrado': valor_cobrado,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+            return Encomenda.objects.get(cliente__nome=cliente)
+
+        def marcar_entregue(encomenda):
+            for _ in range(2):
+                response = self.client.post(
+                    reverse('avancar_status_encomenda', args=[encomenda.pk]),
+                    {'status': 'todas'},
+                )
+                self.assertEqual(response.status_code, 302)
+            encomenda.refresh_from_db()
+            self.assertEqual(encomenda.status, Encomenda.Status.ENTREGUE)
+
+        # custo Bolo Chocolate = 85.00
+        # margens: 100 (semana), 200 (mês fora da semana), 300 (fora do mês),
+        # 400 (pendente na semana — não deve entrar)
+        encomenda_semana = cadastrar('Rita', data_na_semana, '185.00')
+        marcar_entregue(encomenda_semana)
+
+        encomenda_mes = cadastrar('Sofia', data_mes_fora_semana, '285.00')
+        marcar_entregue(encomenda_mes)
+
+        encomenda_fora = cadastrar('Tania', data_fora_mes, '385.00')
+        marcar_entregue(encomenda_fora)
+
+        encomenda_pendente = cadastrar('Ursula', data_na_semana, '485.00')
+        self.assertEqual(
+            encomenda_pendente.status,
+            Encomenda.Status.PENDENTE,
+        )
+
+        margem_semana_esperada = Decimal('100.00')
+        margem_mes_esperada = Decimal('300.00')
+
+        resumo = self.client.get(reverse('resumo_financeiro'))
+        self.assertEqual(resumo.status_code, 200)
+        self.assertEqual(resumo.context['semana_inicio'], semana_inicio)
+        self.assertEqual(resumo.context['semana_fim'], semana_fim)
+        self.assertEqual(resumo.context['mes_inicio'], mes_inicio)
+        self.assertEqual(resumo.context['mes_fim'], mes_fim)
+        self.assertEqual(
+            resumo.context['margem_semana'],
+            margem_semana_esperada,
+        )
+        self.assertEqual(resumo.context['margem_mes'], margem_mes_esperada)
+        self.assertContains(resumo, 'Semana atual')
+        self.assertContains(resumo, 'Mês atual')
+        self.assertContains(resumo, _moeda(margem_semana_esperada))
+        self.assertContains(resumo, _moeda(margem_mes_esperada))
+
+    def test_listagem_ordena_pela_data_de_entrega_mais_proxima(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        # Cadastro propositalmente fora de ordem cronológica.
+        cadastros = [
+            ('Vera', '25/11/2026', '180.00'),
+            ('Ana', '12/11/2026', '170.00'),
+            ('Paula', '20/11/2026', '190.00'),
+        ]
+        for cliente, data_entrega, valor_cobrado in cadastros:
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_entrega,
+                    'valor_cobrado': valor_cobrado,
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(Encomenda.objects.count(), 3)
+
+        listagem = self.client.get(reverse('minhas_encomendas'))
+        self.assertEqual(listagem.status_code, 200)
+
+        nomes_ordenados = [
+            item['encomenda'].cliente.nome
+            for item in listagem.context['itens']
+        ]
+        datas_ordenadas = [
+            item['encomenda'].data_entrega
+            for item in listagem.context['itens']
+        ]
+
+        self.assertEqual(nomes_ordenados, ['Ana', 'Paula', 'Vera'])
+        self.assertEqual(
+            datas_ordenadas,
+            [
+                date(2026, 11, 12),
+                date(2026, 11, 20),
+                date(2026, 11, 25),
+            ],
+        )
+        self.assertContains(listagem, 'Ana — Bolo')
+        self.assertContains(listagem, 'Paula — Bolo')
+        self.assertContains(listagem, 'Vera — Bolo')
+
+        # Na HTML, a mais próxima deve aparecer antes das demais.
+        conteudo = listagem.content.decode()
+        pos_ana = conteudo.index('Ana — Bolo')
+        pos_paula = conteudo.index('Paula — Bolo')
+        pos_vera = conteudo.index('Vera — Bolo')
+        self.assertLess(pos_ana, pos_paula)
+        self.assertLess(pos_paula, pos_vera)
+
+    def test_aviso_na_home_conta_entregas_de_hoje_e_amanha(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        hoje = timezone.localdate()
+        amanha = hoje + timedelta(days=1)
+        distante = hoje + timedelta(days=10)
+
+        def data_br(valor):
+            return valor.strftime('%d/%m/%Y')
+
+        for cliente, data_entrega in (
+            ('Clara', hoje),
+            ('Dora', amanha),
+            ('Elisa', distante),
+        ):
+            response = self.client.post(
+                reverse('nova_encomenda'),
+                {
+                    'cliente': cliente,
+                    'item': self._item_bolo_chocolate(),
+                    'data_entrega': data_br(data_entrega),
+                    'valor_cobrado': '180.00',
+                },
+            )
+            self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(Encomenda.objects.count(), 3)
+
+        home = self.client.get(reverse('home'))
+        self.assertEqual(home.status_code, 200)
+        self.assertEqual(home.context['entregas_proximas'], 2)
+        self.assertContains(home, '⚠')
+        self.assertContains(home, '2 entregas para hoje ou amanhã')
+        self.assertContains(home, 'status-icone')
+        self.assertContains(home, 'status-texto')
+        self.assertNotContains(home, '3 entregas para hoje ou amanhã')
