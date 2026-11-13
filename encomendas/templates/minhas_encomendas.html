@@ -156,18 +156,21 @@
     }
     .order-actions {
       display: flex;
+      flex-direction: column;
+      gap: 8px;
       margin-top: 4px;
     }
     .order-actions form {
       margin: 0;
       width: 100%;
     }
+    .btn-editar,
     .btn-avancar {
       width: 100%;
       min-width: 44px;
       min-height: 44px;
       border-radius: 8px;
-      border: 1px solid currentColor;
+      border: 1px solid var(--line);
       background: var(--panel);
       padding: 10px 12px;
       display: inline-flex;
@@ -178,6 +181,12 @@
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      color: var(--fg);
+      text-decoration: none;
+      box-sizing: border-box;
+    }
+    .btn-avancar {
+      border-color: currentColor;
     }
     .btn-avancar .status-icone {
       font-style: normal;
@@ -314,8 +323,12 @@
               <span>Margem {{ item.margem_texto }}</span>
             {% endif %}
           </div>
-          {% if item.proximo_status %}
-            <div class="order-actions">
+          <div class="order-actions">
+            <a
+              class="btn-editar"
+              href="{% url 'editar_encomenda' item.encomenda.pk %}"
+            >Editar</a>
+            {% if item.proximo_status %}
               <form
                 method="post"
                 action="{% url 'avancar_status_encomenda' item.encomenda.pk %}"
@@ -331,8 +344,8 @@
                   <span>{{ item.proximo_status_rotulo }}</span>
                 </button>
               </form>
-            </div>
-          {% endif %}
+            {% endif %}
+          </div>
         </article>
       {% empty %}
         <div class="empty">Nenhuma encomenda encontrada para este filtro.</div>

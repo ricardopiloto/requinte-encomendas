@@ -7,6 +7,11 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('encomendas/nova/', views.nova_encomenda, name='nova_encomenda'),
     path(
+        'encomendas/<int:pk>/editar/',
+        views.editar_encomenda,
+        name='editar_encomenda',
+    ),
+    path(
         'encomendas/<int:pk>/avancar-status/',
         views.avancar_status_encomenda,
         name='avancar_status_encomenda',

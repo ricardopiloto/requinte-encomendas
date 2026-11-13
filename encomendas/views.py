@@ -118,7 +118,44 @@ def nova_encomenda(request):
     else:
         form = EncomendaForm()
 
-    return render(request, 'nova_encomenda.html', {'form': form})
+    return render(
+        request,
+        'encomenda_form.html',
+        {
+            'form': form,
+            'titulo': 'Nova encomenda',
+            'botao_salvar': 'Salvar encomenda',
+            'cancel_url': reverse('home'),
+        },
+    )
+
+
+@login_required
+def editar_encomenda(request, pk):
+    encomenda = get_object_or_404(Encomenda.objects.select_related('cliente'), pk=pk)
+
+    if request.method == 'POST':
+        form = EncomendaForm(request.POST, instance=encomenda)
+        if form.is_valid():
+            atualizada = form.save()
+            messages.success(
+                request,
+                f'Dados da encomenda de {atualizada.cliente.nome} atualizados.',
+            )
+            return redirect('minhas_encomendas')
+    else:
+        form = EncomendaForm(instance=encomenda)
+
+    return render(
+        request,
+        'encomenda_form.html',
+        {
+            'form': form,
+            'titulo': 'Editar encomenda',
+            'botao_salvar': 'Salvar alterações',
+            'cancel_url': reverse('minhas_encomendas'),
+        },
+    )
 
 
 @login_required

@@ -66,6 +66,8 @@ class EncomendaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and not self.is_bound:
+            self.fields['cliente'].initial = self.instance.cliente.nome
         for name, field in self.fields.items():
             field.required = True
             css = field.widget.attrs.get('class', '')
@@ -101,12 +103,15 @@ class EncomendaForm(forms.ModelForm):
         return sabor
 
     def save(self, commit=True):
+        status_atual = self.instance.status if self.instance.pk else None
         encomenda = super().save(commit=False)
         nome = self.cleaned_data['cliente']
         cliente = Cliente.objects.filter(nome__iexact=nome).first()
         if cliente is None:
             cliente = Cliente.objects.create(nome=nome, telefone='')
         encomenda.cliente = cliente
+        if status_atual is not None:
+            encomenda.status = status_atual
         if commit:
             encomenda.save()
         return encomenda
