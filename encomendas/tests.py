@@ -288,3 +288,81 @@ class FluxoEncomendaIntegracaoTests(TestCase):
             listagem_response,
             f'Margem R$ {margem_esperada:.2f}',
         )
+
+    def test_avanco_de_status_na_listagem_sem_retrocesso(self):
+        login_response = self.client.post(
+            reverse('login'),
+            {
+                'username': self.user.username,
+                'password': self.password,
+            },
+        )
+        self.assertEqual(login_response.status_code, 302)
+
+        cadastro_response = self.client.post(
+            reverse('nova_encomenda'),
+            {
+                'cliente': 'Carla',
+                'produto': 'Bolo',
+                'sabor': 'Chocolate',
+                'data_entrega': '2026-11-15',
+                'valor_cobrado': '150.00',
+            },
+        )
+        self.assertEqual(cadastro_response.status_code, 302)
+
+        encomenda = Encomenda.objects.get()
+        self.assertEqual(encomenda.status, Encomenda.Status.PENDENTE)
+
+        listagem_pendente = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem_pendente, 'status-pendente')
+        self.assertContains(listagem_pendente, 'Pendente')
+        self.assertContains(listagem_pendente, 'Marcar como em produção?')
+        self.assertContains(listagem_pendente, 'Em produção')
+        self.assertNotContains(listagem_pendente, 'Marcar como entregue?')
+
+        avanco_producao = self.client.post(
+            reverse('avancar_status_encomenda', args=[encomenda.pk]),
+            {'status': 'todas'},
+        )
+        self.assertEqual(avanco_producao.status_code, 302)
+        encomenda.refresh_from_db()
+        self.assertEqual(encomenda.status, Encomenda.Status.EM_PRODUCAO)
+
+        listagem_producao = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem_producao, 'status-em-producao')
+        self.assertContains(listagem_producao, 'Em produção')
+        self.assertContains(listagem_producao, 'Marcar como entregue?')
+        self.assertContains(
+            listagem_producao,
+            'Encomenda de Carla marcada como em produção.',
+        )
+        self.assertNotContains(listagem_producao, 'Marcar como pendente?')
+        self.assertNotContains(listagem_producao, 'Marcar como em produção?')
+
+        avanco_entregue = self.client.post(
+            reverse('avancar_status_encomenda', args=[encomenda.pk]),
+            {'status': 'todas'},
+        )
+        self.assertEqual(avanco_entregue.status_code, 302)
+        encomenda.refresh_from_db()
+        self.assertEqual(encomenda.status, Encomenda.Status.ENTREGUE)
+
+        listagem_entregue = self.client.get(reverse('minhas_encomendas'))
+        self.assertContains(listagem_entregue, 'status-entregue')
+        self.assertContains(listagem_entregue, 'Entregue')
+        self.assertContains(
+            listagem_entregue,
+            'Encomenda de Carla marcada como entregue.',
+        )
+        self.assertNotContains(listagem_entregue, 'Marcar como em produção?')
+        self.assertNotContains(listagem_entregue, 'Marcar como entregue?')
+        self.assertNotContains(listagem_entregue, 'Marcar como pendente?')
+
+        tentativa_retrocesso = self.client.post(
+            reverse('avancar_status_encomenda', args=[encomenda.pk]),
+            {'status': 'todas'},
+        )
+        self.assertEqual(tentativa_retrocesso.status_code, 302)
+        encomenda.refresh_from_db()
+        self.assertEqual(encomenda.status, Encomenda.Status.ENTREGUE)
