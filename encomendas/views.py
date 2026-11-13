@@ -3,6 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import DecimalField, OuterRef, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from .forms import CustoProdutoForm, EncomendaForm
 from .models import CustoProduto, Encomenda
@@ -30,6 +32,11 @@ STATUS_META = {
         'classe': 'status-entregue',
         'rotulo': 'Entregue',
     },
+}
+
+STATUS_AVANCO = {
+    Encomenda.Status.PENDENTE: Encomenda.Status.EM_PRODUCAO,
+    Encomenda.Status.EM_PRODUCAO: Encomenda.Status.ENTREGUE,
 }
 
 
@@ -61,6 +68,9 @@ def _montar_itens_encomenda(encomendas):
             margem_valor = encomenda.valor_cobrado - custo
             margem_texto = f'R$ {margem_valor:.2f}'
 
+        proximo_status = STATUS_AVANCO.get(encomenda.status)
+        proximo_meta = STATUS_META.get(proximo_status) if proximo_status else None
+
         itens.append(
             {
                 'encomenda': encomenda,
@@ -69,6 +79,21 @@ def _montar_itens_encomenda(encomendas):
                 'status_rotulo': meta['rotulo'],
                 'margem_texto': margem_texto,
                 'margem_valor': margem_valor,
+                'proximo_status': proximo_status,
+                'proximo_status_icone': (
+                    proximo_meta['icone'] if proximo_meta else None
+                ),
+                'proximo_status_classe': (
+                    proximo_meta['classe'] if proximo_meta else None
+                ),
+                'proximo_status_rotulo': (
+                    proximo_meta['rotulo'] if proximo_meta else None
+                ),
+                'confirmacao_avanco': (
+                    f'Marcar como {proximo_meta["rotulo"].lower()}?'
+                    if proximo_meta
+                    else None
+                ),
             }
         )
     return itens
@@ -136,6 +161,32 @@ def minhas_encomendas(request):
             'status_filtros': STATUS_FILTROS,
         },
     )
+
+
+@login_required
+@require_POST
+def avancar_status_encomenda(request, pk):
+    encomenda = get_object_or_404(Encomenda, pk=pk)
+    proximo_status = STATUS_AVANCO.get(encomenda.status)
+
+    if proximo_status is None:
+        messages.error(
+            request,
+            'Esta encomenda já está entregue e não pode avançar de status pela listagem.',
+        )
+    else:
+        encomenda.status = proximo_status
+        encomenda.save(update_fields=['status'])
+        rotulo = STATUS_META[proximo_status]['rotulo']
+        messages.success(
+            request,
+            f'Encomenda de {encomenda.cliente.nome} marcada como {rotulo.lower()}.',
+        )
+
+    status_filtro = request.POST.get('status', 'todas')
+    if status_filtro and status_filtro != 'todas':
+        return redirect(f"{reverse('minhas_encomendas')}?status={status_filtro}")
+    return redirect('minhas_encomendas')
 
 
 @login_required

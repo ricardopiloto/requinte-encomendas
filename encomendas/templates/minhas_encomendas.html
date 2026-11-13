@@ -154,6 +154,43 @@
     .margem-ausente {
       font-style: italic;
     }
+    .order-actions {
+      display: flex;
+      margin-top: 4px;
+    }
+    .order-actions form {
+      margin: 0;
+      width: 100%;
+    }
+    .btn-avancar {
+      width: 100%;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 8px;
+      border: 1px solid currentColor;
+      background: var(--panel);
+      padding: 10px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-avancar .status-icone {
+      font-style: normal;
+      line-height: 1;
+    }
+    .messages .error {
+      padding: 0.75rem 0.85rem;
+      border-radius: 8px;
+      background: #fde8e8;
+      color: #9b1c1c;
+      font-size: 13px;
+      font-weight: 600;
+    }
     .empty {
       border: 1px dashed var(--line-soft);
       border-radius: 8px;
@@ -277,6 +314,25 @@
               <span>Margem {{ item.margem_texto }}</span>
             {% endif %}
           </div>
+          {% if item.proximo_status %}
+            <div class="order-actions">
+              <form
+                method="post"
+                action="{% url 'avancar_status_encomenda' item.encomenda.pk %}"
+                onsubmit="return confirm('{{ item.confirmacao_avanco|escapejs }}');"
+              >
+                {% csrf_token %}
+                <input type="hidden" name="status" value="{{ status_filtro }}">
+                <button
+                  type="submit"
+                  class="btn-avancar {{ item.proximo_status_classe }}"
+                >
+                  <span class="status-icone" aria-hidden="true">{{ item.proximo_status_icone }}</span>
+                  <span>{{ item.proximo_status_rotulo }}</span>
+                </button>
+              </form>
+            </div>
+          {% endif %}
         </article>
       {% empty %}
         <div class="empty">Nenhuma encomenda encontrada para este filtro.</div>
